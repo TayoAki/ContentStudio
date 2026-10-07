@@ -296,3 +296,40 @@ export function getSyncStatus() {
     "SELECT source, MAX(fetched_at) AS last, COUNT(*) AS n FROM trending_posts GROUP BY source",
   );
 }
+
+// Closes the loop: which formats actually convert, not just which get views.
+export type FormatPerformance = {
+  format_id: string | null;
+  format_name: string | null;
+  posts: number;
+  views: number;
+  saves: number;
+  follows: number;
+  clicks: number;
+  purchases: number;
+  revenue_cents: number;
+};
+
+export function listFormatPerformance(): FormatPerformance[] {
+  const byFormat = new Map<string, FormatPerformance>();
+  const formatIds = new Map(
+    all<{ id: string; format_id: string | null }>("SELECT id, format_id FROM ideas").map((i) => [i.id, i.format_id]),
+  );
+  for (const p of listPostsWithFunnel()) {
+    const formatId = p.idea_id ? formatIds.get(p.idea_id) ?? null : null;
+    const key = formatId ?? "none";
+    const row = byFormat.get(key) ?? {
+      format_id: formatId, format_name: p.format_name, posts: 0, views: 0, saves: 0,
+      follows: 0, clicks: 0, purchases: 0, revenue_cents: 0,
+    };
+    row.posts += 1;
+    row.views += p.views;
+    row.saves += p.saves;
+    row.follows += p.follows;
+    row.clicks += p.clicks;
+    row.purchases += p.purchases;
+    row.revenue_cents += p.revenue_cents;
+    byFormat.set(key, row);
+  }
+  return [...byFormat.values()].sort((a, b) => b.revenue_cents - a.revenue_cents);
+}

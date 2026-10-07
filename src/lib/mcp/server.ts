@@ -1,0 +1,543 @@
+import "server-only";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { claudeBrief } from "@/lib/brief";
+import {
+  IngestError,
+  addAsset,
+  createTrackedLink,
+  recordEvent,
+  recordMetrics,
+  recordPost,
+  updateIdea,
+  upsertCreator,
+  upsertFormat,
+  upsertIdea,
+  upsertNiche,
+  upsertTrendingPost,
+} from "@/lib/ingest";
+import { fetchTikTokProfileVideos } from "@/lib/integrations/scrapecreators";
+import {
+  IDEA_STATUSES,
+  getFormat,
+  getIdea,
+  getPostMetricsSeries,
+  getTotals,
+  listAssets,
+  listCreators,
+  listFormatPerformance,
+  listFormats,
+  listIdeas,
+  listKeywords,
+  listLinks,
+  listNiches,
+  listPostsWithFunnel,
+  listRecentEvents,
+  listTrendingPosts,
+} from "@/lib/queries";
+
+// The ContentStudio MCP server: every step of discover -> recreate -> track
+// exposed as tools so Claude can run the whole loop and the app is the
+// shared record of what it did.
+
+const PLATFORM = z.enum(["instagram", "tiktok"]);
+const STATUS = z.enum(IDEA_STATUSES);
+const FORMAT_STATUS = z.enum(["watching", "testing", "winner", "retired"]);
+const appUrl = () => process.env.APP_URL ?? "http://localhost:3000";
+
+type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
+
+// Every tool returns JSON text; validation errors come back as tool errors
+// Claude can read and correct rather than as transport failures.
+function handle<A>(fn: (args: A) => unknown) {
+  return async (args: A): Promise<ToolResult> => {
+    try {
+      const result = await fn(args);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (err) {
+      if (err instanceof IngestError || err instanceof z.ZodError) {
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+      throw err;
+    }
+  };
+}
+
+const creatorShape = {
+  platform: PLATFORM,
+  handle: z.string().describe("Without the @"),
+  display_name: z.string().optional(),
+  niche_id: z.string().optional(),
+  followers: z.number().int().optional(),
+  followers_30d_ago: z.number().int().optional().describe("Follower count ~30 days ago; drives the breakout score"),
+  first_post_at: z.string().optional().describe("ISO date of the account's first post (account age)"),
+  source: z.string().optional().describe("virlo | scrapecreators | manual"),
+};
+
+const trendingShape = {
+  url: z.string().url(),
+  platform: PLATFORM,
+  niche_id: z.string().optional(),
+  format_id: z.string().optional().describe("Set once you've classified the post into a format"),
+  hook: z.string().optional().describe("The first line / on-screen text that stops the scroll"),
+  caption: z.string().optional(),
+  transcript: z.string().optional(),
+  thumbnail_url: z.string().optional(),
+  views: z.number().int().optional(),
+  likes: z.number().int().optional(),
+  comments: z.number().int().optional(),
+  shares: z.number().int().optional(),
+  saves: z.number().int().optional(),
+  posted_at: z.string().optional(),
+  source: z.string().optional().describe("virlo | scrapecreators | manual"),
+  creator: z.object(creatorShape).optional().describe("Creator is upserted and linked automatically"),
+};
+
+const ideaShape = {
+  title: z.string(),
+  format_id: z.string().optional(),
+  hook: z.string().optional(),
+  script: z.string().optional().describe("Beat-by-beat script"),
+  notes: z.string().optional().describe("Research notes / references"),
+  status: STATUS.optional(),
+  platform: PLATFORM.optional(),
+  scheduled_for: z.string().optional().describe("ISO datetime; puts the idea on the content calendar"),
+};
+
+export function createMcpServer(): McpServer {
+  const server = new McpServer(
+    { name: "contentstudio", version: "0.1.0" },
+    {
+      instructions: `ContentStudio finds replicable short-form formats, stores the content made from them, and tracks each post to revenue.
+Workflow: (1) Discover - add_trending_posts / sync_scrapecreators, then cluster posts into formats with save_format; breakout creators are young accounts with fast 30-day growth. (2) Recreate - get_format_brief, write scripts with save_ideas, attach generated media with add_assets, schedule via update_idea(scheduled_for). (3) Track - mark_posted, create_tracked_link (+ ManyChat keyword), record_metrics, then get_performance / get_format_performance to see which formats convert and feed that back into Discover.
+Prefer educational, save-worthy formats. Always record what you produce in ContentStudio rather than only in chat.`,
+    },
+  );
+
+  // ---------------- Discover ----------------
+
+  server.registerTool(
+    "list_niches",
+    { title: "List niches", description: "Niches being researched, with their search keywords.", annotations: { readOnlyHint: true } },
+    handle(() => listNiches()),
+  );
+
+  server.registerTool(
+    "save_niche",
+    {
+      title: "Create or update a niche",
+      description: "Add a niche to research (e.g. 'Men's fashion'). Returns its id.",
+      inputSchema: { name: z.string(), keywords: z.string().optional().describe("Comma-separated search keywords"), id: z.string().optional() },
+    },
+    handle((args) => ({ id: upsertNiche(args) })),
+  );
+
+  server.registerTool(
+    "get_discover_overview",
+    {
+      title: "Discover overview",
+      description: "Formats (with example count, views, save rate, status), breakout creators, and top outlier posts for a niche.",
+      inputSchema: { niche_id: z.string(), limit: z.number().int().min(1).max(50).optional() },
+      annotations: { readOnlyHint: true },
+    },
+    handle(({ niche_id, limit = 10 }: { niche_id: string; limit?: number }) => ({
+      formats: listFormats(niche_id),
+      breakout_creators: listCreators(niche_id)
+        .filter((c) => c.account_age_days < 180 && c.growth_30d > 0.5)
+        .slice(0, limit),
+      top_posts: listTrendingPosts({ nicheId: niche_id }).slice(0, limit),
+    })),
+  );
+
+  server.registerTool(
+    "list_trending_posts",
+    {
+      title: "List trending posts",
+      description: "Trending posts sorted by reach multiple (views / creator followers). Filter by niche or format; set unclassified_only to find posts still needing a format.",
+      inputSchema: {
+        niche_id: z.string().optional(),
+        format_id: z.string().optional(),
+        unclassified_only: z.boolean().optional(),
+        limit: z.number().int().min(1).max(200).optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    handle(({ niche_id, format_id, unclassified_only, limit = 25 }: { niche_id?: string; format_id?: string; unclassified_only?: boolean; limit?: number }) =>
+      listTrendingPosts({ nicheId: niche_id, formatId: format_id })
+        .filter((p) => !unclassified_only || !p.format_id)
+        .slice(0, limit),
+    ),
+  );
+
+  server.registerTool(
+    "add_trending_posts",
+    {
+      title: "Add trending posts",
+      description: "Store trending videos found via Virlo, Scrape Creators or browsing. Upserts by URL (re-sending updates the stats).",
+      inputSchema: { posts: z.array(z.object(trendingShape)).min(1) },
+    },
+    handle(({ posts }: { posts: Record<string, unknown>[] }) => ({ ids: posts.map(upsertTrendingPost) })),
+  );
+
+  server.registerTool(
+    "save_creators",
+    {
+      title: "Add or update creators",
+      description: "Upsert creator accounts (by platform + handle) so breakout accounts can be ranked.",
+      inputSchema: { creators: z.array(z.object(creatorShape)).min(1) },
+    },
+    handle(({ creators }: { creators: Record<string, unknown>[] }) => ({ ids: creators.map(upsertCreator) })),
+  );
+
+  server.registerTool(
+    "list_creators",
+    {
+      title: "List creators",
+      description: "Creators in a niche ranked by 30-day follower growth, with account age and their top format.",
+      inputSchema: { niche_id: z.string().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    handle(({ niche_id }: { niche_id?: string }) => listCreators(niche_id)),
+  );
+
+  server.registerTool(
+    "sync_scrapecreators",
+    {
+      title: "Sync TikTok creators from Scrape Creators",
+      description: "Pull recent videos for TikTok handles via Scrape Creators and store them as trending posts. Requires SCRAPECREATORS_API_KEY on the server.",
+      inputSchema: { handles: z.array(z.string()).min(1), niche_id: z.string().optional() },
+      annotations: { openWorldHint: true },
+    },
+    handle(async ({ handles, niche_id }: { handles: string[]; niche_id?: string }) => {
+      const results: Record<string, number | string> = {};
+      for (const handle of handles) {
+        try {
+          const videos = await fetchTikTokProfileVideos(handle.replace(/^@/, ""));
+          videos.forEach((v) => upsertTrendingPost({ ...v, niche_id }));
+          results[handle] = videos.length;
+        } catch (err) {
+          results[handle] = err instanceof Error ? err.message : "failed";
+        }
+      }
+      return results;
+    }),
+  );
+
+  server.registerTool(
+    "save_format",
+    {
+      title: "Create or update a format",
+      description: "Define a replicable content format (the pattern behind several trending posts) and link example posts to it by URL. Pass id to update, including changing status (watching -> testing -> winner).",
+      inputSchema: {
+        id: z.string().optional(),
+        name: z.string(),
+        niche_id: z.string().optional(),
+        summary: z.string().optional(),
+        structure: z.array(z.string()).optional().describe("Ordered beats, e.g. '0-2s: hook text on screen'"),
+        why_it_works: z.string().optional(),
+        status: FORMAT_STATUS.optional(),
+        example_urls: z.array(z.string()).optional().describe("Trending post URLs that use this format"),
+      },
+    },
+    handle((args: Record<string, unknown>) => {
+      const existing = typeof args.id === "string" ? getFormat(args.id) : undefined;
+      return { id: upsertFormat({ ...existing, ...Object.fromEntries(Object.entries(args).filter(([, v]) => v !== undefined)) }) };
+    }),
+  );
+
+  server.registerTool(
+    "get_format_brief",
+    {
+      title: "Get a format brief",
+      description: "Everything needed to recreate a format: structure, why it works, and the top examples with hooks/captions/transcripts.",
+      inputSchema: { format_id: z.string() },
+      annotations: { readOnlyHint: true },
+    },
+    handle(({ format_id }: { format_id: string }) => {
+      const format = getFormat(format_id);
+      if (!format) throw new IngestError(`Format "${format_id}" not found`);
+      return { format, brief: claudeBrief(format, listTrendingPosts({ formatId: format_id }), appUrl()) };
+    }),
+  );
+
+  // ---------------- Recreate ----------------
+
+  server.registerTool(
+    "list_ideas",
+    {
+      title: "List ideas",
+      description: "The content pipeline (idea -> scripting -> producing -> ready -> scheduled -> posted).",
+      inputSchema: { status: STATUS.optional(), format_id: z.string().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    handle(({ status, format_id }: { status?: string; format_id?: string }) =>
+      listIdeas().filter((i) => (!status || i.status === status) && (!format_id || i.format_id === format_id)),
+    ),
+  );
+
+  server.registerTool(
+    "get_idea",
+    {
+      title: "Get an idea",
+      description: "One idea with its full script and attached assets.",
+      inputSchema: { idea_id: z.string() },
+      annotations: { readOnlyHint: true },
+    },
+    handle(({ idea_id }: { idea_id: string }) => {
+      const idea = getIdea(idea_id);
+      if (!idea) throw new IngestError(`Idea "${idea_id}" not found`);
+      return { ...idea, assets: listAssets(idea_id) };
+    }),
+  );
+
+  server.registerTool(
+    "save_ideas",
+    {
+      title: "Save new ideas / scripts",
+      description: "Add one or more ideas (usually scripts written from a format brief). They appear on the Recreate board marked as from Claude.",
+      inputSchema: { ideas: z.array(z.object(ideaShape)).min(1) },
+    },
+    handle(({ ideas }: { ideas: Record<string, unknown>[] }) => ({
+      ids: ideas.map((i) => upsertIdea({ status: "scripting", ...i, created_by: "claude" })),
+    })),
+  );
+
+  server.registerTool(
+    "update_idea",
+    {
+      title: "Update an idea",
+      description: "Change any fields on an idea: rewrite the script, move its status, or schedule it (scheduled_for). Only fields you pass change.",
+      inputSchema: { idea_id: z.string(), ...Object.fromEntries(Object.entries(ideaShape).map(([k, v]) => [k, v.optional()])) },
+    },
+    handle(({ idea_id, ...patch }: { idea_id: string } & Record<string, unknown>) => ({ id: updateIdea(idea_id, patch) })),
+  );
+
+  server.registerTool(
+    "add_assets",
+    {
+      title: "Attach generated assets",
+      description: "Register images, videos, carousels or captions you generated, linked to an idea. url can be a public URL or a path under the app's /public folder.",
+      inputSchema: {
+        assets: z
+          .array(
+            z.object({
+              idea_id: z.string(),
+              kind: z.enum(["image", "video", "carousel", "caption", "script"]),
+              url: z.string(),
+              label: z.string().optional(),
+            }),
+          )
+          .min(1),
+      },
+    },
+    handle(({ assets }: { assets: Record<string, unknown>[] }) => ({ ids: assets.map((a) => addAsset({ ...a, created_by: "claude" })) })),
+  );
+
+  server.registerTool(
+    "get_calendar",
+    {
+      title: "Content calendar",
+      description: "Scheduled and posted ideas between two dates (defaults: today through +30 days), plus unscheduled ideas still in progress.",
+      inputSchema: { from: z.string().optional(), to: z.string().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    handle(({ from, to }: { from?: string; to?: string }) => {
+      const start = from ? new Date(from) : new Date(new Date().toDateString());
+      const end = to ? new Date(to) : new Date(start.getTime() + 30 * 86_400_000);
+      const ideas = listIdeas();
+      return {
+        scheduled: ideas
+          .filter((i) => i.scheduled_for && new Date(i.scheduled_for) >= start && new Date(i.scheduled_for) <= end)
+          .map(({ id, title, status, platform, scheduled_for, format_name }) => ({ id, title, status, platform, scheduled_for, format_name })),
+        unscheduled: ideas
+          .filter((i) => !i.scheduled_for && i.status !== "posted")
+          .map(({ id, title, status, format_name }) => ({ id, title, status, format_name })),
+      };
+    }),
+  );
+
+  // ---------------- Track ----------------
+
+  server.registerTool(
+    "mark_posted",
+    {
+      title: "Mark an idea as posted",
+      description: "Record that an idea was published so it starts being tracked. Returns the post_id used by metrics, links and events.",
+      inputSchema: {
+        idea_id: z.string(),
+        url: z.string().optional(),
+        platform: PLATFORM.optional(),
+        published_at: z.string().optional(),
+      },
+    },
+    handle(({ idea_id, url, platform, published_at }: { idea_id: string; url?: string; platform?: string; published_at?: string }) => {
+      const idea = getIdea(idea_id);
+      if (!idea) throw new IngestError(`Idea "${idea_id}" not found`);
+      return { post_id: recordPost({ idea_id, url, caption: idea.title, platform: platform ?? idea.platform, published_at }) };
+    }),
+  );
+
+  server.registerTool(
+    "record_metrics",
+    {
+      title: "Record post metrics",
+      description: "Snapshot a post's stats (from Instagram Insights, TikTok analytics, etc.). Send periodically; the latest snapshot is used.",
+      inputSchema: {
+        metrics: z
+          .array(
+            z.object({
+              post_id: z.string(),
+              captured_at: z.string().optional(),
+              views: z.number().int().optional(),
+              likes: z.number().int().optional(),
+              comments: z.number().int().optional(),
+              shares: z.number().int().optional(),
+              saves: z.number().int().optional(),
+              profile_visits: z.number().int().optional(),
+              follows: z.number().int().optional(),
+            }),
+          )
+          .min(1),
+      },
+    },
+    handle(({ metrics }: { metrics: Record<string, unknown>[] }) => {
+      metrics.forEach(recordMetrics);
+      return { recorded: metrics.length };
+    }),
+  );
+
+  server.registerTool(
+    "create_tracked_link",
+    {
+      title: "Create a tracked link",
+      description: `Create ${appUrl()}/l/<slug>, which logs clicks and forwards a cs_cid click id to checkout. Optionally register a ManyChat comment keyword for the same post. Omit post_id for the link-in-bio.`,
+      inputSchema: {
+        slug: z.string(),
+        destination: z.string().url(),
+        post_id: z.string().optional(),
+        keyword: z.string().optional().describe("ManyChat comment keyword, e.g. BLAZER"),
+        label: z.string().optional(),
+      },
+    },
+    handle((args: Record<string, unknown>) => {
+      const { slug, keyword } = createTrackedLink(args);
+      return { url: `${appUrl()}/l/${slug}`, keyword };
+    }),
+  );
+
+  server.registerTool(
+    "record_events",
+    {
+      title: "Record funnel events",
+      description: "Log funnel events manually (comment_keyword, dm_sent, link_click, optin, purchase). Attribution falls back from post_id -> click_id -> keyword -> link_slug. ManyChat and Stripe normally send these via webhooks.",
+      inputSchema: {
+        events: z
+          .array(
+            z.object({
+              type: z.enum(["comment_keyword", "dm_sent", "link_click", "optin", "purchase"]),
+              post_id: z.string().optional(),
+              keyword: z.string().optional(),
+              link_slug: z.string().optional(),
+              click_id: z.string().optional(),
+              contact_ref: z.string().optional(),
+              value_cents: z.number().int().optional(),
+            }),
+          )
+          .min(1),
+      },
+    },
+    handle(({ events }: { events: Record<string, unknown>[] }) => ({
+      ids: events.map((e) => recordEvent({ ...(e as Parameters<typeof recordEvent>[0]), source: "manual" })),
+    })),
+  );
+
+  server.registerTool(
+    "get_performance",
+    {
+      title: "Content performance",
+      description: "Per-post funnel (views, saves, follows, keyword comments, DMs, clicks, opt-ins, purchases, revenue) plus account totals. Pass post_id for one post with its views-over-time series.",
+      inputSchema: { post_id: z.string().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    handle(({ post_id }: { post_id?: string }) => {
+      const posts = listPostsWithFunnel();
+      if (post_id) {
+        const post = posts.find((p) => p.id === post_id);
+        if (!post) throw new IngestError(`Post "${post_id}" not found`);
+        return { ...post, series: getPostMetricsSeries(post_id) };
+      }
+      return { totals: getTotals(), posts };
+    }),
+  );
+
+  server.registerTool(
+    "get_format_performance",
+    {
+      title: "Performance by format",
+      description: "Views, saves, follows, clicks, purchases and revenue rolled up per format, sorted by revenue. Use this to decide which formats to make more of.",
+      annotations: { readOnlyHint: true },
+    },
+    handle(() => listFormatPerformance()),
+  );
+
+  server.registerTool(
+    "list_links_and_keywords",
+    {
+      title: "Tracked links and keywords",
+      description: "All tracked links with clicks/sales/revenue, ManyChat keywords with comment counts, and the latest funnel events.",
+      annotations: { readOnlyHint: true },
+    },
+    handle(() => ({ links: listLinks(), keywords: listKeywords(), recent_events: listRecentEvents(25) })),
+  );
+
+  // ---------------- Prompts (slash commands in Claude Code) ----------------
+
+  server.registerPrompt(
+    "find_and_recreate",
+    {
+      title: "Find a winning format and recreate it",
+      description: "Run the full discover -> recreate loop for a niche.",
+      argsSchema: { niche: z.string().describe("Niche name or id, e.g. 'mens fashion'"), count: z.string().optional() },
+    },
+    ({ niche, count }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Run the ContentStudio loop for the "${niche}" niche:
+1. list_niches; create it with save_niche if missing.
+2. Find what's trending: use the Virlo tools if available, otherwise sync_scrapecreators for fast-growing accounts in the niche. Store everything with add_trending_posts (include creator follower counts and 30-day growth).
+3. Look for accounts that are new and grew fast, and for educational, save-worthy posts. Cluster the outliers into replicable formats with save_format (structure as timed beats, why_it_works, example_urls).
+4. Check get_format_performance so formats that already converted for us get priority.
+5. Pick the strongest format, call get_format_brief, and write ${count ?? "5"} scripts with save_ideas.
+6. Schedule them on open days with update_idea(scheduled_for) using get_calendar.
+Summarise what you found and what you queued.`,
+          },
+        },
+      ],
+    }),
+  );
+
+  server.registerPrompt(
+    "performance_review",
+    {
+      title: "Weekly performance review",
+      description: "Review what converted and feed it back into the plan.",
+    },
+    () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Review ContentStudio performance: call get_performance and get_format_performance. Identify which posts and formats drove follows, clicks and revenue (not just views), where the funnel leaks (comment -> DM -> click -> opt-in -> purchase), and whether any format should move to winner or retired via save_format. Then propose next week's ideas with save_ideas.`,
+          },
+        },
+      ],
+    }),
+  );
+
+  return server;
+}
+

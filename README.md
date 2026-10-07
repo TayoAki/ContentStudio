@@ -18,6 +18,27 @@ npm run dev                  # http://localhost:3000
 
 Requires Node 22+ (uses the built-in `node:sqlite`). The database is created at `data/contentstudio.db` and seeded with a demo men's-fashion niche; delete the file to reset.
 
+## Control it from Claude (MCP)
+
+The app is an MCP server at `/api/mcp` (streamable HTTP), so Claude Code can run the whole loop: research a niche, define formats, write and schedule scripts, attach media, mark posts live, create tracked links/keywords and read back performance.
+
+This repo ships a `.mcp.json`, so opening it in Claude Code picks the server up automatically (it reads `CONTENTSTUDIO_URL` and `CONTENTSTUDIO_API_KEY` from your shell). To add it elsewhere:
+
+```bash
+claude mcp add --transport http contentstudio https://your-app.example.com/api/mcp \
+  --header "Authorization: Bearer $CONTENTSTUDIO_API_KEY"
+```
+
+| Stage | Tools |
+|---|---|
+| Discover | `list_niches`, `save_niche`, `get_discover_overview`, `list_trending_posts`, `add_trending_posts`, `save_creators`, `list_creators`, `sync_scrapecreators`, `save_format`, `get_format_brief` |
+| Recreate | `list_ideas`, `get_idea`, `save_ideas`, `update_idea`, `add_assets`, `get_calendar` |
+| Track | `mark_posted`, `record_metrics`, `create_tracked_link`, `record_events`, `get_performance`, `get_format_performance`, `list_links_and_keywords` |
+
+Two MCP prompts show up as slash commands in Claude Code: `/mcp__contentstudio__find_and_recreate <niche>` (full discover → scripts → calendar run) and `/mcp__contentstudio__performance_review`.
+
+Pair it with Virlo's MCP server for trend data; Claude moves results from Virlo into ContentStudio with `add_trending_posts`.
+
 ## How attribution works
 
 1. Each post gets a tracked link (`/l/<slug>`) and optionally a ManyChat keyword (e.g. comment **BLAZER**).

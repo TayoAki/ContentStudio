@@ -189,3 +189,38 @@ export function recordEvent(e: EventInput): string {
   );
   return eventId;
 }
+
+export function upsertNiche(input: Record<string, unknown>): string {
+  const name = required(input.name, "name");
+  const nicheId = optStr(input.id) ?? name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  run(
+    `INSERT INTO niches (id, name, keywords) VALUES (?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET name = excluded.name, keywords = excluded.keywords`,
+    nicheId, name, str(input.keywords),
+  );
+  return nicheId;
+}
+
+// Merge-update: only the fields provided change.
+export function updateIdea(ideaId: string, patch: Record<string, unknown>): string {
+  const existing = db().prepare("SELECT * FROM ideas WHERE id = ?").get(ideaId) as Record<string, unknown> | undefined;
+  if (!existing) throw new IngestError(`Idea "${ideaId}" not found`);
+  const defined = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  return upsertIdea({ ...existing, ...defined, id: ideaId });
+}
+
+export function createTrackedLink(input: Record<string, unknown>): { slug: string; keyword: string | null } {
+  const slug = required(input.slug, "slug").toLowerCase().replace(/[^a-z0-9-]/g, "");
+  const destination = required(input.destination, "destination");
+  if (!slug || !URL.canParse(destination)) throw new IngestError("A slug and a valid destination URL are required");
+  const postId = optStr(input.post_id);
+  run(
+    "INSERT OR REPLACE INTO links (slug, destination, label, post_id) VALUES (?, ?, ?, ?)",
+    slug, destination, str(input.label), postId,
+  );
+  const keyword = optStr(input.keyword)?.toUpperCase() ?? null;
+  if (keyword) {
+    run("INSERT OR REPLACE INTO keywords (keyword, post_id, link_slug) VALUES (?, ?, ?)", keyword, postId, slug);
+  }
+  return { slug, keyword };
+}

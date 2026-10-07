@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { recordPost, upsertIdea } from "@/lib/ingest";
+import { createTrackedLink, recordPost, upsertIdea } from "@/lib/ingest";
 import { getFormat, getIdea, IDEA_STATUSES, type IdeaStatus } from "@/lib/queries";
 
 const field = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
@@ -66,18 +66,12 @@ export async function setFormatStatus(form: FormData) {
 }
 
 export async function createLink(form: FormData) {
-  const slug = field(form, "slug").toLowerCase().replace(/[^a-z0-9-]/g, "");
-  const destination = field(form, "destination");
-  if (!slug || !URL.canParse(destination)) throw new Error("Slug and a valid destination URL are required");
-  const postId = field(form, "post_id") || null;
-  db()
-    .prepare("INSERT OR REPLACE INTO links (slug, destination, label, post_id) VALUES (?, ?, ?, ?)")
-    .run(slug, destination, field(form, "label"), postId);
-  const keyword = field(form, "keyword").toUpperCase();
-  if (keyword) {
-    db()
-      .prepare("INSERT OR REPLACE INTO keywords (keyword, post_id, link_slug) VALUES (?, ?, ?)")
-      .run(keyword, postId, slug);
-  }
+  createTrackedLink({
+    slug: field(form, "slug"),
+    destination: field(form, "destination"),
+    label: field(form, "label"),
+    post_id: field(form, "post_id") || null,
+    keyword: field(form, "keyword"),
+  });
   revalidatePath("/track");
 }
