@@ -72,6 +72,15 @@ export type Idea = {
   scheduled_for: string | null;
   created_by: string;
   assets: number;
+  // The trending video this idea replicates, if it was saved from Discover.
+  source_post_id: string | null;
+  source_url: string | null;
+  source_thumbnail: string | null;
+  source_hook: string | null;
+  source_handle: string | null;
+  source_views: number | null;
+  source_likes: number | null;
+  source_saves: number | null;
 };
 
 export const IDEA_STATUSES = ["idea", "scripting", "producing", "ready", "scheduled", "posted"] as const;
@@ -190,11 +199,26 @@ export function listCreators(ws: string, nicheId?: string): Creator[] {
 
 export function listIdeas(ws: string): Idea[] {
   return all<Idea>(
-    `SELECT i.*, f.name AS format_name, (SELECT COUNT(*) FROM assets a WHERE a.idea_id = i.id) AS assets
-     FROM ideas i LEFT JOIN formats f ON f.id = i.format_id
+    `SELECT i.*, f.name AS format_name, (SELECT COUNT(*) FROM assets a WHERE a.idea_id = i.id) AS assets,
+       t.url AS source_url, t.thumbnail_url AS source_thumbnail, t.hook AS source_hook, c.handle AS source_handle,
+       t.views AS source_views, t.likes AS source_likes, t.saves AS source_saves
+     FROM ideas i
+     LEFT JOIN formats f ON f.id = i.format_id
+     LEFT JOIN trending_posts t ON t.id = i.source_post_id
+     LEFT JOIN creators c ON c.id = t.creator_id
      WHERE i.workspace_id = ?
      ORDER BY COALESCE(i.scheduled_for, i.created_at) ASC`,
     ws,
+  );
+}
+
+// trending post id -> idea id, for showing "Saved" on videos in Discover.
+export function savedVideoIdeas(ws: string): Map<string, string> {
+  return new Map(
+    all<{ source_post_id: string; id: string }>(
+      "SELECT source_post_id, id FROM ideas WHERE workspace_id = ? AND source_post_id IS NOT NULL",
+      ws,
+    ).map((r) => [r.source_post_id, r.id]),
   );
 }
 

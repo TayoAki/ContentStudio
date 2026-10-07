@@ -11,6 +11,7 @@ import {
 } from "@/app/actions";
 import { CopyButton } from "@/components/copy-button";
 import { Flash } from "@/components/flash";
+import { SaveIdeaButton } from "@/components/save-idea-button";
 import { VideoTile } from "@/components/video-tile";
 import { Badge, Card, SectionTitle, SidebarLink, SidebarSection, Workspace } from "@/components/workspace";
 import { requireSession } from "@/lib/auth";
@@ -24,6 +25,7 @@ import {
   listNiches,
   listTrendAccounts,
   listTrendingPosts,
+  savedVideoIdeas,
   type Format,
   type TrendAccount,
   type TrendingPost,
@@ -60,6 +62,7 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
   const groups = groupByCategory(accounts);
   const formats = nicheId ? listFormats(ws, nicheId) : [];
   const videos = nicheId ? listTrendingPosts(ws, { nicheId }) : [];
+  const saved = savedVideoIdeas(ws);
   const account = accounts.find((a) => a.id === sp.account);
   const format = formats.find((f) => f.id === sp.format) ?? (tab === "formats" ? formats[0] : undefined);
   const href = (q: Record<string, string | undefined>) =>
@@ -70,11 +73,11 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
     )}`;
 
   const right = account ? (
-    <AccountPanel account={account} nicheId={nicheId} />
+    <AccountPanel account={account} nicheId={nicheId} saved={saved} />
   ) : format ? (
-    <FormatPanel ws={ws} format={format} />
+    <FormatPanel ws={ws} format={format} saved={saved} />
   ) : accounts[0] ? (
-    <AccountPanel account={accounts[0]} nicheId={nicheId} />
+    <AccountPanel account={accounts[0]} nicheId={nicheId} saved={saved} />
   ) : (
     <p className="text-sm text-muted">Pull in some accounts to see them here.</p>
   );
@@ -167,7 +170,7 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
                 </h3>
                 <Card className="divide-y divide-line">
                   {list.map((a) => (
-                    <AccountRow key={a.id} account={a} href={href({ account: a.id, format: undefined })} active={a.id === account?.id} />
+                    <AccountRow key={a.id} account={a} href={href({ account: a.id, format: undefined })} active={a.id === account?.id} saved={saved} />
                   ))}
                 </Card>
               </section>
@@ -205,7 +208,7 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
                   </Link>
                   <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
                     {examples.map((v) => (
-                      <VideoTile key={v.id} size="sm" url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={v.platform} label={`@${v.handle}`} />
+                      <SavableTile key={v.id} video={v} saved={saved} size="sm" platform={v.platform} label={`@${v.handle}`} />
                     ))}
                     {examples.length === 0 && <p className="text-xs text-muted">No example videos linked yet.</p>}
                   </div>
@@ -218,14 +221,14 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
 
       {tab === "videos" && nicheId && (
         <>
-          <SectionTitle title="Top videos" subtitle="Every stored video in this niche, by views. — means the platform doesn’t report that stat (Instagram hides saves and shares, and views on photo posts)." />
+          <SectionTitle title="Top videos" subtitle="Every stored video in this niche, by views. Save the ones you want to replicate straight into Ideas. — means the platform doesn’t report that stat (Instagram hides saves and shares, and views on photo posts)." />
           {videos.length === 0 && <EmptyHint />}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
             {[...videos].sort(byReach).map((v) => (
               <div key={v.id}>
                 <VideoTile url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={v.platform}
                   label={v.reach_multiple >= 1 ? `${v.reach_multiple.toFixed(1)}x` : undefined} />
-                <VideoStats video={v} />
+                <VideoStats video={v} ideaId={saved.get(v.id)} />
               </div>
             ))}
           </div>
@@ -235,10 +238,26 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
   );
 }
 
+type Saved = Map<string, string>;
+
+// A video tile with a one-click "Save to Ideas" button in the corner.
+function SavableTile({ video: v, saved, size, platform, label }: {
+  video: TrendingPost; saved: Saved; size?: "sm" | "md"; platform?: string; label?: string;
+}) {
+  return (
+    <div className="relative shrink-0">
+      <VideoTile size={size} url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={platform} label={label} />
+      <div className="absolute bottom-1.5 right-1.5">
+        <SaveIdeaButton postId={v.id} ideaId={saved.get(v.id)} compact />
+      </div>
+    </div>
+  );
+}
+
 // A zero we can't distinguish from "not reported" is shown as a dash.
 const stat = (n: number) => (n > 0 ? compact(n) : "—");
 
-function VideoStats({ video: v }: { video: TrendingPost }) {
+function VideoStats({ video: v, ideaId }: { video: TrendingPost; ideaId?: string }) {
   const engagement = v.likes + v.comments + v.shares + v.saves;
   // Engagement against views when we have them, otherwise against followers.
   const base = v.views > 0 ? v.views : v.followers;
@@ -267,6 +286,9 @@ function VideoStats({ video: v }: { video: TrendingPost }) {
           </div>
         ))}
       </dl>
+      <div className="mt-2">
+        <SaveIdeaButton postId={v.id} ideaId={ideaId} />
+      </div>
     </div>
   );
 }
@@ -284,7 +306,7 @@ function Avatar({ account, size = 40 }: { account: TrendAccount; size?: number }
   );
 }
 
-function AccountRow({ account: a, href, active }: { account: TrendAccount; href: string; active: boolean }) {
+function AccountRow({ account: a, href, active, saved }: { account: TrendAccount; href: string; active: boolean; saved: Saved }) {
   return (
     <div className={`p-4 ${active ? "bg-accent-soft/40" : ""}`}>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,14rem)]">
@@ -340,7 +362,7 @@ function AccountRow({ account: a, href, active }: { account: TrendAccount; href:
       {a.top_videos.length > 0 && (
         <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
           {a.top_videos.map((v, i) => (
-            <VideoTile key={v.id} size="sm" url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} label={i === 0 ? "Best" : undefined} />
+            <SavableTile key={v.id} video={v} saved={saved} size="sm" label={i === 0 ? "Best" : undefined} />
           ))}
         </div>
       )}
@@ -348,7 +370,7 @@ function AccountRow({ account: a, href, active }: { account: TrendAccount; href:
   );
 }
 
-function AccountPanel({ account: a, nicheId }: { account: TrendAccount; nicheId?: string }) {
+function AccountPanel({ account: a, nicheId, saved }: { account: TrendAccount; nicheId?: string; saved: Saved }) {
   return (
     <div className="space-y-5">
       <div className="flex items-start gap-3">
@@ -374,7 +396,7 @@ function AccountPanel({ account: a, nicheId }: { account: TrendAccount; nicheId?
         </h4>
         <div className="grid grid-cols-3 gap-2">
           {a.top_videos.map((v) => (
-            <VideoTile key={v.id} url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} />
+            <SavableTile key={v.id} video={v} saved={saved} />
           ))}
         </div>
       </div>
@@ -433,7 +455,7 @@ function Welcome() {
   );
 }
 
-function FormatPanel({ ws, format }: { ws: string; format: Format }) {
+function FormatPanel({ ws, format, saved }: { ws: string; format: Format; saved: Saved }) {
   const examples = listTrendingPosts(ws, { formatId: format.id });
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   return (
@@ -464,7 +486,7 @@ function FormatPanel({ ws, format }: { ws: string; format: Format }) {
         <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Examples</h4>
         <div className="grid grid-cols-3 gap-2">
           {examples.slice(0, 6).map((v) => (
-            <VideoTile key={v.id} url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} />
+            <SavableTile key={v.id} video={v} saved={saved} />
           ))}
         </div>
       </div>

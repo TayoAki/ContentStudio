@@ -216,6 +216,7 @@ const COLUMNS: [table: string, column: string, definition: string][] = [
   ["creators", "sells_url", "TEXT"],
   ["creators", "bio", "TEXT"],
   ["creators", "avatar_url", "TEXT"],
+  ["ideas", "source_post_id", "TEXT"], // the trending video this idea replicates
 ];
 
 function migrate(conn: DatabaseSync) {

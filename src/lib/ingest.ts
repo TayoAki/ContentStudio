@@ -152,18 +152,64 @@ function asStatus(v: unknown, fallback: IdeaStatus): IdeaStatus {
 export function upsertIdea(ws: string, input: Record<string, unknown>): string {
   const ideaId = claimId(ws, "ideas", optStr(input.id), "idea");
   run(
-    `INSERT INTO ideas (id, workspace_id, format_id, title, hook, script, notes, status, platform, scheduled_for, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO ideas (id, workspace_id, format_id, title, hook, script, notes, status, platform, scheduled_for, created_by, source_post_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        format_id = excluded.format_id, title = excluded.title,
        hook = excluded.hook, script = excluded.script, notes = excluded.notes,
        status = excluded.status, platform = excluded.platform,
-       scheduled_for = excluded.scheduled_for, updated_at = datetime('now')`,
+       scheduled_for = excluded.scheduled_for, source_post_id = excluded.source_post_id,
+       updated_at = datetime('now')`,
     ideaId, ws, owned(ws, "formats", optStr(input.format_id)), required(input.title, "title"), str(input.hook),
     str(input.script), str(input.notes), asStatus(input.status, "idea"), str(input.platform, "instagram"),
     optStr(input.scheduled_for), str(input.created_by, "claude"),
+    owned(ws, "trending_posts", optStr(input.source_post_id)),
   );
   return ideaId;
+}
+
+// "Save to Ideas" on a video: one idea per source video, pre-filled from it.
+export function saveVideoAsIdea(ws: string, postId: string, createdBy = "user"): { id: string; created: boolean } {
+  owned(ws, "trending_posts", postId);
+  const existing = db()
+    .prepare("SELECT id FROM ideas WHERE workspace_id = ? AND source_post_id = ?")
+    .get(ws, postId) as { id: string } | undefined;
+  if (existing) return { id: existing.id, created: false };
+
+  const v = db()
+    .prepare(
+      `SELECT t.*, c.handle, c.followers, f.name AS format_name FROM trending_posts t
+       LEFT JOIN creators c ON c.id = t.creator_id LEFT JOIN formats f ON f.id = t.format_id
+       WHERE t.id = ?`,
+    )
+    .get(postId) as Record<string, string | number | null>;
+  const hook = String(v.hook || "").trim();
+  const handle = v.handle ? `@${v.handle}` : "a creator";
+  const statsLine = [
+    Number(v.views) > 0 && `${Number(v.views).toLocaleString()} views`,
+    Number(v.likes) > 0 && `${Number(v.likes).toLocaleString()} likes`,
+    Number(v.saves) > 0 && `${Number(v.saves).toLocaleString()} saves`,
+    Number(v.comments) > 0 && `${Number(v.comments).toLocaleString()} comments`,
+  ].filter(Boolean).join(" · ");
+  const notes = [
+    `Replicating ${handle}'s video: ${v.url}`,
+    statsLine && `Stats when saved: ${statsLine}${Number(v.followers) > 0 ? ` (account: ${Number(v.followers).toLocaleString()} followers)` : ""}`,
+    v.format_name && `Format: ${v.format_name}`,
+    v.caption && `Original caption: ${String(v.caption).slice(0, 500)}`,
+    v.transcript && `Transcript: ${String(v.transcript).slice(0, 2000)}`,
+  ].filter(Boolean).join("\n");
+
+  const id = upsertIdea(ws, {
+    title: hook ? (hook.length > 80 ? `${hook.slice(0, 77)}…` : hook) : `Recreate ${handle} video`,
+    hook,
+    notes,
+    format_id: v.format_id,
+    platform: v.platform,
+    status: "idea",
+    created_by: createdBy,
+    source_post_id: postId,
+  });
+  return { id, created: true };
 }
 
 // Merge-update: only the fields provided change.

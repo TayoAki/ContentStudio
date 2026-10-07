@@ -11,6 +11,7 @@ import {
   createTrackedLink,
   recordPost,
   setFormatStatus as setFormatStatusFor,
+  saveVideoAsIdea,
   updateCreatorMeta,
   updateIdea,
   upsertIdea,
@@ -135,6 +136,17 @@ export async function runCreatorSync(form: FormData) {
   const results = await syncCreators(ws, platform, handles, field(form, "niche_id") || null);
   await flash(Object.entries(results).map(([h, r]) => `@${h}: ${typeof r === "number" ? `${r} posts` : r}`).join(" · "));
   revalidatePath("/discover");
+}
+
+// "Save to Ideas" from any video in Discover. Stays on the page so several
+// videos can be saved in a row.
+export async function saveVideoToIdeas(form: FormData) {
+  const { workspaceId: ws } = await requireSession();
+  await guarded(() => {
+    saveVideoAsIdea(ws, field(form, "post_id"));
+  });
+  revalidatePath("/discover");
+  revalidatePath("/recreate");
 }
 
 export async function updateAccount(form: FormData) {
