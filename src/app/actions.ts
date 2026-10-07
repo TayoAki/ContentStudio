@@ -8,6 +8,9 @@ import { db } from "@/lib/db";
 import { searchReels, syncCreators } from "@/lib/discovery";
 import {
   IngestError,
+  archiveFormat,
+  deleteFormat,
+  mergeFormats,
   createTrackedLink,
   recordPost,
   setFormatStatus as setFormatStatusFor,
@@ -115,6 +118,56 @@ export async function createLink(form: FormData) {
     });
   });
   revalidatePath("/track");
+}
+
+// Archive / restore / delete / merge. Stay on Discover, on the formats tab.
+function formatsPage(form: FormData, formatId?: string, opts: { archivedList?: boolean; niche?: string | null } = {}) {
+  const q = new URLSearchParams({ tab: "formats" });
+  const niche = opts.niche ?? field(form, "niche_id");
+  if (niche) q.set("niche", niche);
+  if (formatId) q.set("format", formatId);
+  if (opts.archivedList ?? field(form, "show_archived") === "1") q.set("archived", "1");
+  return `/discover?${q}`;
+}
+
+export async function archiveFormatAction(form: FormData) {
+  const { workspaceId: ws } = await requireSession();
+  const id = field(form, "id");
+  const restore = field(form, "restore") === "1";
+  await guarded(async () => {
+    archiveFormat(ws, id, !restore);
+    await flash(restore ? "Format restored." : "Format archived. Find it under Archived on the Winning formats tab.");
+  });
+  revalidatePath("/discover");
+  // A restored format goes back to the Active list, opened.
+  redirect(restore ? formatsPage(form, id, { archivedList: false }) : formatsPage(form));
+}
+
+export async function deleteFormatAction(form: FormData) {
+  const { workspaceId: ws } = await requireSession();
+  await guarded(async () => {
+    deleteFormat(ws, field(form, "id"));
+    await flash("Format deleted. Its videos and ideas were kept, without the format label.");
+  });
+  revalidatePath("/discover");
+  revalidatePath("/recreate");
+  redirect(formatsPage(form));
+}
+
+export async function mergeFormatAction(form: FormData) {
+  const { workspaceId: ws } = await requireSession();
+  const into = field(form, "into_id");
+  let ok = false;
+  await guarded(async () => {
+    const r = mergeFormats(ws, field(form, "id"), into);
+    const n = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+    await flash(`Merged: moved ${n(r.moved_videos, "video")} and ${n(r.moved_ideas, "idea")}.`);
+    ok = true;
+  });
+  revalidatePath("/discover");
+  revalidatePath("/recreate");
+  // The kept format may live in another niche; open it there.
+  redirect(ok ? formatsPage(form, into, { archivedList: false, niche: getFormat(ws, into)?.niche_id }) : formatsPage(form, field(form, "id")));
 }
 
 // ---------- Discover ----------

@@ -1,14 +1,18 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import { ExternalLink, Flame, Rocket, ShoppingBag, Sparkles } from "lucide-react";
+import { Archive, ExternalLink, Flame, Rocket, ShoppingBag, Sparkles } from "lucide-react";
 import {
+  archiveFormatAction,
   createIdeaFromFormat,
+  deleteFormatAction,
+  mergeFormatAction,
   createNiche,
   runCreatorSync,
   runReelSearch,
   setFormatStatus,
   updateAccount,
 } from "@/app/actions";
+import { ConfirmButton } from "@/components/confirm-button";
 import { CopyButton } from "@/components/copy-button";
 import { Flash } from "@/components/flash";
 import { SaveIdeaButton } from "@/components/save-idea-button";
@@ -60,17 +64,26 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
   const tab: TabKey = TABS.includes(sp.tab as TabKey) ? (sp.tab as TabKey) : "accounts";
   const accounts = nicheId ? listTrendAccounts(ws, nicheId, 12) : [];
   const groups = groupByCategory(accounts);
-  const formats = nicheId ? listFormats(ws, nicheId) : [];
+  const allFormats = nicheId ? listFormats(ws, nicheId, { archived: "all" }) : [];
+  const activeFormats = allFormats.filter((f) => !f.archived_at);
+  const archivedFormats = allFormats.filter((f) => f.archived_at);
+  const showArchived = tab === "formats" && sp.archived === "1";
+  const formats = showArchived ? archivedFormats : activeFormats;
   const videos = nicheId ? listTrendingPosts(ws, { nicheId }) : [];
   const saved = savedVideoIdeas(ws);
   const filter = readFilter(sp);
   const counts = countKinds(videos);
   const shownVideos = applyFilter(videos, filter, saved);
   const account = accounts.find((a) => a.id === sp.account);
-  const format = formats.find((f) => f.id === sp.format) ?? (tab === "formats" ? formats[0] : undefined);
+  const format = allFormats.find((f) => f.id === sp.format) ?? (tab === "formats" ? formats[0] : undefined);
   const href = (q: Record<string, string | undefined>) =>
     `/discover?${new URLSearchParams(
-      Object.entries({ niche: nicheId, tab, account: account?.id, format: format?.id, ...(tab === "videos" ? filterParams(filter) : {}), ...q }).filter(
+      Object.entries({
+        niche: nicheId, tab, account: account?.id, format: format?.id,
+        ...(tab === "videos" ? filterParams(filter) : {}),
+        ...(showArchived ? { archived: "1" } : {}),
+        ...q,
+      }).filter(
         (e): e is [string, string] => !!e[1],
       ),
     )}`;
@@ -78,7 +91,7 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
   const right = account ? (
     <AccountPanel account={account} nicheId={nicheId} saved={saved} />
   ) : format ? (
-    <FormatPanel ws={ws} format={format} saved={saved} />
+    <FormatPanel ws={ws} format={format} saved={saved} nicheId={nicheId} showArchived={showArchived} />
   ) : accounts[0] ? (
     <AccountPanel account={accounts[0]} nicheId={nicheId} saved={saved} />
   ) : (
@@ -89,9 +102,9 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
     <Workspace
       activeTab={tab}
       tabs={[
-        { key: "accounts", label: "Trend accounts", href: href({ tab: "accounts", format: undefined }) },
+        { key: "accounts", label: "Trend accounts", href: href({ tab: "accounts", format: undefined, archived: undefined }) },
         { key: "formats", label: "Winning formats", href: href({ tab: "formats", account: undefined }) },
-        { key: "videos", label: "Top videos", href: href({ tab: "videos" }) },
+        { key: "videos", label: "Top videos", href: href({ tab: "videos", archived: undefined }) },
       ]}
       sidebar={
         <>
@@ -185,7 +198,34 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
       {tab === "formats" && nicheId && (
         <>
           <SectionTitle title="Winning formats" subtitle="The repeatable pattern behind the top videos, shaped like the videos themselves." />
-          {formats.length === 0 && (
+          {(archivedFormats.length > 0 || showArchived) && (
+            <div className="mb-4 flex items-center gap-1.5" role="group" aria-label="Show formats">
+              {[
+                { label: "Active", count: activeFormats.length, on: !showArchived, to: href({ archived: undefined, format: undefined }) },
+                { label: "Archived", count: archivedFormats.length, on: showArchived, to: href({ archived: "1", format: undefined }) },
+              ].map((o) => (
+                <Link
+                  key={o.label}
+                  href={o.to}
+                  aria-current={o.on ? "true" : undefined}
+                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    o.on ? "border-accent bg-accent text-accent-fg" : "border-line-strong text-muted hover:text-foreground"
+                  }`}
+                >
+                  {o.label} <span className="tabular-nums opacity-70">{o.count}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+          {showArchived && formats.length === 0 && (
+            <EmptyState title="Nothing archived">Archived formats show up here. You can restore them, merge them into another format, or delete them for good.</EmptyState>
+          )}
+          {showArchived && formats.length > 0 && (
+            <p className="mb-4 text-sm text-muted">
+              Archived formats are hidden everywhere else but keep their videos, ideas and stats. Open one to restore, merge or delete it.
+            </p>
+          )}
+          {!showArchived && formats.length === 0 && (
             <EmptyState title="No formats yet">
               A format is the repeatable pattern behind several top videos. Ask Claude to group this niche&apos;s videos into
               formats, or run <code className="font-mono text-xs">/mcp__contentstudio__find_and_recreate</code> in Claude Code.
@@ -201,6 +241,11 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
                       <div className="flex items-center gap-2">
                         <span className="font-semibold">{f.name}</span>
                         <Badge tone={f.status}>{f.status}</Badge>
+                        {f.archived_at && (
+                          <span className="flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-muted">
+                            <Archive size={10} /> archived {shortDate(f.archived_at)}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 text-sm text-muted">{f.summary}</p>
                     </div>
@@ -601,7 +646,7 @@ function Welcome() {
   );
 }
 
-function FormatPanel({ ws, format, saved }: { ws: string; format: Format; saved: Saved }) {
+function FormatPanel({ ws, format, saved, nicheId, showArchived }: { ws: string; format: Format; saved: Saved; nicheId?: string; showArchived: boolean }) {
   const examples = listTrendingPosts(ws, { formatId: format.id });
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   return (
@@ -637,11 +682,15 @@ function FormatPanel({ ws, format, saved }: { ws: string; format: Format; saved:
         </div>
       </div>
       <div className="space-y-2 border-t border-line pt-4">
-        <form action={createIdeaFromFormat}>
-          <input type="hidden" name="format_id" value={format.id} />
-          <button className="btn btn-primary btn-block">Recreate this format →</button>
-        </form>
-        <div className="flex items-center justify-between gap-2">
+        {format.archived_at ? (
+          <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">This format is archived. Restore it to recreate it.</p>
+        ) : (
+          <form action={createIdeaFromFormat}>
+            <input type="hidden" name="format_id" value={format.id} />
+            <button className="btn btn-primary btn-block">Recreate this format →</button>
+          </form>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <CopyButton text={claudeBrief(format, examples, appUrl)} label="Copy Claude brief" />
           <form action={setFormatStatus} className="flex items-center gap-1.5">
             <input type="hidden" name="id" value={format.id} />
@@ -654,6 +703,83 @@ function FormatPanel({ ws, format, saved }: { ws: string; format: Format; saved:
           </form>
         </div>
       </div>
+      <ManageFormat ws={ws} format={format} nicheId={nicheId} showArchived={showArchived} />
+    </div>
+  );
+}
+
+// Retire = "it didn't work" (stays visible as a lesson). Archive = out of the way.
+// Delete only from the archive; merge for duplicates.
+function ManageFormat({ ws, format, nicheId, showArchived }: { ws: string; format: Format; nicheId?: string; showArchived: boolean }) {
+  const targets = listFormats(ws).filter((f) => f.id !== format.id);
+  const hidden = (
+    <>
+      <input type="hidden" name="id" value={format.id} />
+      {nicheId && <input type="hidden" name="niche_id" value={nicheId} />}
+      {showArchived && <input type="hidden" name="show_archived" value="1" />}
+    </>
+  );
+  const usage = [
+    format.examples > 0 && `${format.examples} example video${format.examples === 1 ? "" : "s"}`,
+    format.ideas > 0 && `${format.ideas} idea${format.ideas === 1 ? "" : "s"}`,
+    format.posted > 0 && `${format.posted} posted video${format.posted === 1 ? "" : "s"}`,
+  ].filter(Boolean).join(", ");
+  return (
+    <div className="space-y-3 border-t border-line pt-4">
+      <h4 className="text-xs font-semibold text-muted">Manage format</h4>
+      <p className="text-xs text-muted">{usage ? `Used by ${usage}.` : "Nothing uses this format yet."}</p>
+
+      {format.archived_at ? (
+        <div className="flex flex-wrap gap-2">
+          <form action={archiveFormatAction}>
+            {hidden}
+            <input type="hidden" name="restore" value="1" />
+            <button className="btn btn-secondary btn-sm">Restore</button>
+          </form>
+          <form action={deleteFormatAction}>
+            {hidden}
+            <ConfirmButton
+              className="btn btn-sm border border-bad/40 text-bad hover:bg-bad-soft"
+              message={
+                usage
+                  ? `Delete "${format.name}" forever?\n\n${usage[0].toUpperCase()}${usage.slice(1)} use it. They keep their content but lose the format label${format.posted > 0 ? " and drop out of format performance in Track" : ""}.\n\nThis can't be undone.`
+                  : `Delete "${format.name}" forever? This can't be undone.`
+              }
+            >
+              Delete forever
+            </ConfirmButton>
+          </form>
+        </div>
+      ) : (
+        <form action={archiveFormatAction}>
+          {hidden}
+          <button className="btn btn-secondary btn-sm">
+            <Archive size={13} /> Archive
+          </button>
+          <p className="mt-1 text-[11px] text-muted">Hides it everywhere but keeps its videos, ideas and stats. Use Retired instead if you tested it and it didn&apos;t work.</p>
+        </form>
+      )}
+
+      {targets.length > 0 && (
+        <form action={mergeFormatAction} className="space-y-1.5">
+          {hidden}
+          <label className="block text-xs text-muted" htmlFor={`merge-${format.id}`}>Duplicate of another format? Merge into:</label>
+          <div className="flex gap-1.5">
+            <select id={`merge-${format.id}`} name="into_id" required defaultValue="" className="field min-w-0 flex-1 py-1">
+              <option value="" disabled>Choose a format…</option>
+              {targets.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            <ConfirmButton
+              className="btn btn-secondary btn-sm shrink-0"
+              message={`Merge "${format.name}" into the selected format?\n\nIts ${usage || "videos and ideas"} move over, then "${format.name}" is removed.`}
+            >
+              Merge
+            </ConfirmButton>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
