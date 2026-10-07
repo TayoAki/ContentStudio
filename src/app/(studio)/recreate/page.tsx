@@ -6,7 +6,9 @@ import { markPosted, moveIdea, saveIdea } from "@/app/actions";
 import { Flash } from "@/components/flash";
 import { Badge, Card, SectionTitle, SidebarLink, SidebarSection, Workspace } from "@/components/workspace";
 import { requireSession } from "@/lib/auth";
-import { shortDate } from "@/lib/format";
+import { compact, shortDate } from "@/lib/format";
+import { thumbSrc } from "@/lib/thumbs";
+import { VideoTile } from "@/components/video-tile";
 import { IDEA_STATUSES, listAssets, listFormats, listIdeas, type Idea } from "@/lib/queries";
 
 const TABS = ["board", "calendar", "library"] as const;
@@ -69,8 +71,21 @@ function IdeaCard({ idea, href, active }: { idea: Idea; href: Href; active?: boo
   return (
     <Link href={href({ idea: idea.id })}>
       <Card className={`p-3 transition-shadow hover:shadow-sm ${active ? "ring-2 ring-accent" : ""}`}>
-        <div className="text-sm font-medium leading-snug">{idea.title}</div>
-        {idea.hook && <p className="mt-1 line-clamp-2 text-xs text-muted">&ldquo;{idea.hook}&rdquo;</p>}
+        <div className="flex gap-2">
+          {idea.source_post_id && (
+            <div className="relative aspect-[9/16] w-10 shrink-0 overflow-hidden rounded-md bg-zinc-800" title={`Replicating @${idea.source_handle}`}>
+              {thumbSrc(idea.source_thumbnail) && (
+                // eslint-disable-next-line @next/next/no-img-element -- proxied platform thumbnail
+                <img src={thumbSrc(idea.source_thumbnail)!} alt="" className="h-full w-full object-cover" />
+              )}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="text-sm font-medium leading-snug [overflow-wrap:anywhere]">{idea.title}</div>
+            {idea.source_handle && <div className="truncate text-[11px] text-muted">from @{idea.source_handle}</div>}
+          </div>
+        </div>
+        {idea.hook && idea.hook !== idea.title && <p className="mt-1 line-clamp-2 text-xs text-muted">&ldquo;{idea.hook}&rdquo;</p>}
         <div className="mt-2 flex flex-wrap items-center gap-1">
           {idea.format_name && <Badge>{idea.format_name}</Badge>}
           {idea.created_by === "claude" && <Badge tone="claude">claude</Badge>}
@@ -84,7 +99,7 @@ function IdeaCard({ idea, href, active }: { idea: Idea; href: Href; active?: boo
 function Board({ ideas, href, selectedId }: { ideas: Idea[]; href: Href; selectedId?: string }) {
   return (
     <>
-      <SectionTitle title="Ideas pipeline" subtitle="Ideas and scripts land here from Claude Code; move them to posted to start tracking." />
+      <SectionTitle title="Ideas pipeline" subtitle="Videos you save in Discover and scripts from Claude land here. Move them to posted to start tracking." />
       <div className="grid gap-3 lg:grid-cols-3 2xl:grid-cols-6">
         {IDEA_STATUSES.map((s) => (
           <div key={s} className="min-w-0 rounded-xl bg-zinc-100/70 p-2">
@@ -232,6 +247,25 @@ function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
           close
         </Link>
       </div>
+      {idea.source_post_id && (
+        <div className="flex gap-3 rounded-lg border border-line bg-background p-2">
+          <div className="w-20 shrink-0">
+            <VideoTile url={idea.source_url ?? undefined} thumbnail={idea.source_thumbnail} hook={idea.source_hook ?? ""} views={idea.source_views ?? 0} likes={idea.source_likes ?? 0} saves={idea.source_saves ?? 0} />
+          </div>
+          <div className="min-w-0 text-xs">
+            <div className="font-semibold uppercase tracking-wide text-muted">Replicating</div>
+            <div className="mt-0.5 font-medium">@{idea.source_handle}</div>
+            <div className="mt-1 space-y-0.5 tabular-nums text-muted">
+              {!!idea.source_views && <div>{compact(idea.source_views)} views</div>}
+              {!!idea.source_likes && <div>{compact(idea.source_likes)} likes</div>}
+              {!!idea.source_saves && <div>{compact(idea.source_saves)} saves</div>}
+            </div>
+            {idea.source_url && (
+              <a href={idea.source_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-accent underline">Open original</a>
+            )}
+          </div>
+        </div>
+      )}
       <form action={saveIdea} className="space-y-3">
         <input type="hidden" name="id" value={idea.id} />
         <label className="block text-xs text-muted">

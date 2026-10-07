@@ -5,7 +5,7 @@ Find a short-form format that's working in your niche, recreate it with Claude C
 | Module | What it does | Data in |
 |---|---|---|
 | **Discover** | **Trend accounts** grouped by trend type (e.g. "AI models", "Colour & outfit guides") with followers, how fast they got there, their best videos as 9:16 tiles, and what they sell. Plus replicable **formats** and a top-videos wall ranked by reach multiple (views ÷ followers). | Scrape Creators (built in), Virlo (MCP via Claude Code) |
-| **Recreate** | Ideas pipeline, content calendar and asset library. "Copy Claude Code brief" packages a format + top examples; Claude pushes scripts and generated media back. | Claude Code → `/api/ingest/*` |
+| **Recreate** | Ideas pipeline (one-click **Save to Ideas** on any video in Discover, keeping a link to the original), content calendar and asset library. "Copy Claude Code brief" packages a format + top examples; Claude pushes scripts and generated media back. | Claude Code → `/api/ingest/*` |
 | **Track** | Per-post funnel and revenue, tracked links, ManyChat keywords, live event feed, $ per 1k views. | Post metrics, `/l/:slug`, ManyChat, Stripe |
 
 ## Run it
@@ -48,7 +48,7 @@ claude mcp add --transport http contentstudio https://your-app.example.com/api/m
 | Stage | Tools |
 |---|---|
 | Discover | `list_niches`, `save_niche`, `get_discover_overview`, `list_trend_accounts`, `list_trending_posts`, `add_trending_posts`, `save_creators`, `list_creators`, `search_instagram_reels`, `sync_creators`, `get_usage`, `save_format`, `get_format_brief` |
-| Recreate | `list_ideas`, `get_idea`, `save_ideas`, `update_idea`, `add_assets`, `get_calendar` |
+| Recreate | `list_ideas`, `get_idea`, `save_videos_to_ideas`, `save_ideas`, `update_idea`, `add_assets`, `get_calendar` |
 | Track | `mark_posted`, `record_metrics`, `create_tracked_link`, `record_events`, `get_performance`, `get_format_performance`, `list_links_and_keywords` |
 
 Two MCP prompts show up as slash commands in Claude Code: `/mcp__contentstudio__find_and_recreate <niche>` (full discover → scripts → calendar run) and `/mcp__contentstudio__performance_review`.

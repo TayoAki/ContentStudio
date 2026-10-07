@@ -16,8 +16,10 @@ import {
   upsertNiche,
   upsertTrendingPost,
   usageToday,
+  saveVideoAsIdea,
   type EventInput,
 } from "@/lib/ingest";
+import { db } from "@/lib/db";
 import { searchReels, syncCreators } from "@/lib/discovery";
 import { SC_DAILY_LIMIT } from "@/lib/integrations/scrapecreators";
 import {
@@ -344,6 +346,26 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
   );
 
   server.registerTool(
+    "save_videos_to_ideas",
+    {
+      title: "Save videos to the ideas pipeline",
+      description: "Save trending videos you want to replicate as ideas (one idea per video, pre-filled with the hook, format, stats and a link back to the original). Pass trending post ids or URLs. Saving the same video twice returns the existing idea.",
+      inputSchema: {
+        post_ids: z.array(z.string()).optional(),
+        urls: z.array(z.string()).optional().describe("URLs of videos already stored as trending posts"),
+      },
+    },
+    handle(({ post_ids = [], urls = [] }: { post_ids?: string[]; urls?: string[] }) => {
+      const byUrl = urls.map((url) => {
+        const row = db().prepare("SELECT id FROM trending_posts WHERE workspace_id = ? AND url = ?").get(ws, url) as { id: string } | undefined;
+        if (!row) throw new IngestError(`No stored video with url ${url}; add it with add_trending_posts first`);
+        return row.id;
+      });
+      return [...post_ids, ...byUrl].map((id) => ({ post_id: id, ...saveVideoAsIdea(ws, id, "claude") }));
+    }),
+  );
+
+  server.registerTool(
     "update_idea",
     {
       title: "Update an idea",
@@ -552,8 +574,9 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
 3. Review list_trend_accounts. Label every account with a trend type (e.g. "AI models", "Colour & outfit guides") and what it sells via save_creators. Favour accounts that are new and grew fast, and educational, save-worthy videos.
 4. Cluster the outlier videos into replicable formats with save_format (structure as timed beats, why_it_works, example_urls).
 5. Check get_format_performance so formats that already converted for us get priority.
-6. Pick the strongest format, call get_format_brief, and write ${count ?? "5"} scripts with save_ideas.
-7. Schedule them on open days with update_idea(scheduled_for) using get_calendar.
+6. Save the specific videos worth replicating with save_videos_to_ideas.
+7. Pick the strongest format, call get_format_brief, and write ${count ?? "5"} scripts: fill in the saved ideas with update_idea, or add new ones with save_ideas.
+8. Schedule them on open days with update_idea(scheduled_for) using get_calendar.
 Summarise what you found and what you queued.`,
           },
         },
