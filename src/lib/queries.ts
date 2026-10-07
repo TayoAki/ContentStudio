@@ -369,6 +369,9 @@ export type TrendAccount = Creator & {
   top_videos: TrendingPost[];
 };
 
+// Views first; Instagram photo/carousel posts report no views, so likes break ties.
+export const byReach = (a: TrendingPost, b: TrendingPost) => b.views - a.views || b.likes - a.likes;
+
 export function listTrendAccounts(ws: string, nicheId?: string, videosPerAccount = 6): TrendAccount[] {
   const posts = listTrendingPosts(ws, { nicheId });
   const byCreator = new Map<string, TrendingPost[]>();
@@ -381,7 +384,7 @@ export function listTrendAccounts(ws: string, nicheId?: string, videosPerAccount
   return listCreators(ws)
     .filter((c) => !filed || byCreator.has(c.id) || filed.has(c.id))
     .map((c) => {
-      const videos = (byCreator.get(c.id) ?? []).sort((a, b) => b.views - a.views);
+      const videos = (byCreator.get(c.id) ?? []).sort(byReach);
       return {
         ...c,
         total_views: videos.reduce((sum, v) => sum + v.views, 0),
@@ -390,7 +393,7 @@ export function listTrendAccounts(ws: string, nicheId?: string, videosPerAccount
         top_videos: videos.slice(0, videosPerAccount),
       };
     })
-    .sort((a, b) => (b.best?.views ?? 0) - (a.best?.views ?? 0));
+    .sort((a, b) => (b.best?.views ?? 0) - (a.best?.views ?? 0) || (b.best?.likes ?? 0) - (a.best?.likes ?? 0));
 }
 
 function listCreatorIdsInNiche(ws: string, nicheId: string): Set<string> {

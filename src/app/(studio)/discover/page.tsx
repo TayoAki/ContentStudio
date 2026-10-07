@@ -18,6 +18,7 @@ import { claudeBrief } from "@/lib/brief";
 import { thumbSrc } from "@/lib/thumbs";
 import { compact, pct } from "@/lib/format";
 import {
+  byReach,
   groupByCategory,
   listFormats,
   listNiches,
@@ -54,7 +55,7 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
   const niches = listNiches(ws);
   const nicheId = typeof sp.niche === "string" && niches.some((n) => n.id === sp.niche) ? sp.niche : niches[0]?.id;
   const tab: TabKey = TABS.includes(sp.tab as TabKey) ? (sp.tab as TabKey) : "accounts";
-  const accounts = nicheId ? listTrendAccounts(ws, nicheId) : [];
+  const accounts = nicheId ? listTrendAccounts(ws, nicheId, 12) : [];
   const groups = groupByCategory(accounts);
   const formats = nicheId ? listFormats(ws, nicheId) : [];
   const videos = nicheId ? listTrendingPosts(ws, { nicheId }) : [];
@@ -219,7 +220,7 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
           <SectionTitle title="Top videos" subtitle="Every stored video in this niche, by views. Badge shows the reach multiple (views ÷ followers)." />
           {videos.length === 0 && <EmptyHint />}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-            {[...videos].sort((a, b) => b.views - a.views).map((v) => (
+            {[...videos].sort(byReach).map((v) => (
               <div key={v.id}>
                 <VideoTile url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={v.platform}
                   label={v.reach_multiple >= 1 ? `${v.reach_multiple.toFixed(1)}x` : undefined} />
@@ -248,55 +249,64 @@ function Avatar({ account, size = 40 }: { account: TrendAccount; size?: number }
 
 function AccountRow({ account: a, href, active }: { account: TrendAccount; href: string; active: boolean }) {
   return (
-    <div className={`grid gap-4 p-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,12rem)] ${active ? "bg-accent-soft/40" : ""}`}>
-      <Link href={href} className="flex min-w-0 items-start gap-3">
-        <Avatar account={a} />
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="truncate font-semibold">@{a.handle}</span>
-            {isBreakout(a) && (
-              <Badge tone="winner"><Rocket size={10} className="mr-1" />breakout</Badge>
-            )}
+    <div className={`p-4 ${active ? "bg-accent-soft/40" : ""}`}>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,14rem)]">
+        <Link href={href} className="flex min-w-0 items-start gap-3">
+          <Avatar account={a} />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="truncate font-semibold">@{a.handle}</span>
+              {isBreakout(a) && (
+                <Badge tone="winner"><Rocket size={10} className="mr-1" />breakout</Badge>
+              )}
+            </div>
+            <div className="text-xs text-muted">{a.platform === "instagram" ? "Instagram" : "TikTok"}</div>
+            <div className="mt-1 text-sm font-medium tabular-nums">{growthLine(a)}</div>
           </div>
-          <div className="text-xs text-muted">{a.platform === "instagram" ? "Instagram" : "TikTok"}</div>
-          <div className="mt-1 text-sm font-medium tabular-nums">{growthLine(a)}</div>
-        </div>
-      </Link>
+        </Link>
 
-      <div className="min-w-0">
-        {a.best ? (
-          <p className="mb-2 text-sm">
-            <span className="font-semibold tabular-nums">{compact(a.best.views)} views</span>
-            {a.best.hook && <>, &ldquo;{a.best.hook}&rdquo;</>}
-            {a.best.saves > 0 && <span className="text-muted"> ({compact(a.best.saves)} saves)</span>}
-          </p>
-        ) : (
-          <p className="mb-2 text-sm text-muted">No videos synced yet.</p>
-        )}
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="min-w-0 text-sm">
+          <div className="mb-1 text-xs uppercase tracking-wide text-muted">Best video</div>
+          {a.best ? (
+            <p className="line-clamp-2">
+              <span className="font-semibold tabular-nums">
+                {a.best.views > 0 || !a.best.likes ? `${compact(a.best.views)} views` : `${compact(a.best.likes)} likes`}
+              </span>
+              {a.best.hook && <>, &ldquo;{a.best.hook}&rdquo;</>}
+              {a.best.saves > 0 && <span className="text-muted"> ({compact(a.best.saves)} saves)</span>}
+            </p>
+          ) : (
+            <p className="text-muted">No videos synced yet.</p>
+          )}
+        </div>
+
+        <div className="text-sm">
+          <div className="mb-1 text-xs uppercase tracking-wide text-muted">What it sells</div>
+          {a.sells ? (
+            <div className="flex items-start gap-1.5">
+              <ShoppingBag size={14} className="mt-0.5 shrink-0 text-good" />
+              {a.sells_url ? (
+                <a href={a.sells_url.startsWith("http") ? a.sells_url : `https://${a.sells_url}`} target="_blank" rel="noreferrer" className="hover:underline">
+                  {a.sells}
+                </a>
+              ) : (
+                <span>{a.sells}</span>
+              )}
+            </div>
+          ) : (
+            <span className="text-muted">Unknown</span>
+          )}
+        </div>
+      </div>
+
+      {/* Full-width strip of the account's top content. */}
+      {a.top_videos.length > 0 && (
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
           {a.top_videos.map((v, i) => (
             <VideoTile key={v.id} size="sm" url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} label={i === 0 ? "Best" : undefined} />
           ))}
         </div>
-      </div>
-
-      <div className="text-sm">
-        <div className="mb-1 text-xs uppercase tracking-wide text-muted">What it sells</div>
-        {a.sells ? (
-          <div className="flex items-start gap-1.5">
-            <ShoppingBag size={14} className="mt-0.5 shrink-0 text-good" />
-            {a.sells_url ? (
-              <a href={a.sells_url.startsWith("http") ? a.sells_url : `https://${a.sells_url}`} target="_blank" rel="noreferrer" className="hover:underline">
-                {a.sells}
-              </a>
-            ) : (
-              <span>{a.sells}</span>
-            )}
-          </div>
-        ) : (
-          <span className="text-muted">Unknown</span>
-        )}
-      </div>
+      )}
     </div>
   );
 }
