@@ -157,13 +157,17 @@ export function seed(conn: DatabaseSync) {
       ["idea_7", "fmt_formula", "Loafers with jeans: the rule", "", "idea", "instagram", null, "claude"],
     ];
     for (const [iid, fid, title, hook, status, platform, dayOffset, by] of ideas) {
+      const date = dayOffset === null ? null : dayOffset < 0 ? iso(-dayOffset * DAY) : isoAhead(dayOffset * DAY);
+      // Work in progress has a planned date; only scheduled/posted ideas have a publish date.
+      const inProgress = status === "idea" || status === "scripting" || status === "producing";
       run(
-        `INSERT INTO ideas (workspace_id, id, format_id, title, hook, script, status, platform, scheduled_for, created_by)
-         VALUES ('${WS}', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ideas (workspace_id, id, format_id, title, hook, script, status, platform, scheduled_for, planned_for, created_by)
+         VALUES ('${WS}', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         iid, fid, title, hook,
         hook ? `HOOK: ${hook}\nBEAT 1: show look one, call out the hero piece\nBEAT 2: show look two, contrast colour\nRULE: one structured piece + one relaxed piece\nCTA: save this` : "",
         status, platform,
-        dayOffset === null ? null : dayOffset < 0 ? iso(-dayOffset * DAY) : isoAhead(dayOffset * DAY),
+        inProgress ? null : date,
+        inProgress ? date : null,
         by,
       );
     }

@@ -96,6 +96,12 @@ const trendingShape = {
   transcript: z.string().optional(),
   thumbnail_url: z.string().optional(),
   video_url: z.string().optional().describe("Direct video file URL (platform CDN); enables inline playback in Discover"),
+  media_type: z.enum(["video", "carousel", "photo"]).optional().describe("carousel = Instagram carousel or TikTok photo slideshow"),
+  slides: z
+    .array(z.union([z.string(), z.object({ image: z.string(), video: z.string().optional() })]))
+    .optional()
+    .describe("Every slide of a carousel/slideshow, in order: image URLs, or {image, video} for video slides. Shown as a swipeable slideshow in Discover"),
+  audio_url: z.string().optional().describe("A TikTok slideshow's music track"),
   views: z.number().int().optional(),
   likes: z.number().int().optional(),
   comments: z.number().int().optional(),
@@ -114,7 +120,8 @@ const ideaShape = {
   notes: z.string().optional().describe("Research notes / references"),
   status: STATUS.optional(),
   platform: PLATFORM.optional(),
-  scheduled_for: z.string().optional().describe("ISO datetime; puts the idea on the content calendar"),
+  scheduled_for: z.string().optional().describe("Publish date (ISO datetime). Only Ready/Scheduled ideas keep one; on an earlier stage it is saved as planned_for instead"),
+  planned_for: z.string().optional().describe("Target date (YYYY-MM-DD) for when this should be ready to post. Any stage can keep one; shown as a planned chip on the calendar"),
 };
 
 export function createMcpServer(ws: string): McpServer {
@@ -122,7 +129,7 @@ export function createMcpServer(ws: string): McpServer {
     { name: "contentstudio", version: "0.1.0" },
     {
       instructions: `ContentStudio finds replicable short-form formats, stores the content made from them, and tracks each post to revenue.
-Workflow: (1) Discover - search_instagram_reels / sync_creators (Scrape Creators) or add_trending_posts (e.g. from Virlo), then cluster posts into formats with save_format; breakout creators are young accounts with fast 30-day growth. (2) Recreate - get_format_brief, write scripts with save_ideas, attach generated media with add_assets, schedule via update_idea(scheduled_for). (3) Track - mark_posted, create_tracked_link (+ ManyChat keyword), record_metrics, then get_performance / get_format_performance to see which formats convert and feed that back into Discover.
+Workflow: (1) Discover - search_instagram_reels / sync_creators (Scrape Creators) or add_trending_posts (e.g. from Virlo), then cluster posts into formats with save_format; breakout creators are young accounts with fast 30-day growth. (2) Recreate - get_format_brief, write scripts with save_ideas, attach generated media with add_assets, set target dates with planned_for at any stage, and schedule Ready ideas via update_idea(scheduled_for). (3) Track - mark_posted, create_tracked_link (+ ManyChat keyword), record_metrics, then get_performance / get_format_performance to see which formats convert and feed that back into Discover.
 Prefer educational, save-worthy formats. Always record what you produce in ContentStudio rather than only in chat.`,
     },
   );
@@ -166,18 +173,20 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
     "list_trending_posts",
     {
       title: "List trending posts",
-      description: "Trending posts sorted by reach multiple (views / creator followers). Filter by niche or format; set unclassified_only to find posts still needing a format.",
+      description: "Trending posts sorted by reach multiple (views / creator followers). Filter by niche, format or media_type; set unclassified_only to find posts still needing a format. Carousels and TikTok slideshows include every slide's image URL in `slides`, so you can read the slides to recreate them.",
       inputSchema: {
         niche_id: z.string().optional(),
         format_id: z.string().optional(),
+        media_type: z.enum(["video", "carousel", "photo"]).optional(),
         unclassified_only: z.boolean().optional(),
         limit: z.number().int().min(1).max(200).optional(),
       },
       annotations: { readOnlyHint: true },
     },
-    handle(({ niche_id, format_id, unclassified_only, limit = 25 }: { niche_id?: string; format_id?: string; unclassified_only?: boolean; limit?: number }) =>
+    handle(({ niche_id, format_id, media_type, unclassified_only, limit = 25 }: { niche_id?: string; format_id?: string; media_type?: string; unclassified_only?: boolean; limit?: number }) =>
       listTrendingPosts(ws, { nicheId: niche_id, formatId: format_id })
         .filter((p) => !unclassified_only || !p.format_id)
+        .filter((p) => !media_type || p.media_type === media_type)
         .slice(0, limit),
     ),
   );
@@ -370,7 +379,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
     "update_idea",
     {
       title: "Update an idea",
-      description: "Change any fields on an idea: rewrite the script, move its status, or schedule it (scheduled_for). Only fields you pass change. Only ideas in Ready can get a scheduled_for (setting one moves Ready to Scheduled); moving an idea back to idea/scripting/producing clears its date.",
+      description: "Change any fields on an idea: rewrite the script, move its status, set a planned date (planned_for, any stage) or schedule it (scheduled_for). Only fields you pass change. Only ideas in Ready can get a publish date (setting one moves Ready to Scheduled); a scheduled_for sent for an earlier stage is kept as its planned_for, and moving an idea back to idea/scripting/producing turns its publish date into its planned date.",
       inputSchema: { idea_id: z.string(), ...Object.fromEntries(Object.entries(ideaShape).map(([k, v]) => [k, v.optional()])) },
     },
     handle(({ idea_id, ...patch }: { idea_id: string } & Record<string, unknown>) => ({ id: updateIdea(ws, idea_id, patch) })),
@@ -401,7 +410,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
     "get_calendar",
     {
       title: "Content calendar",
-      description: "Scheduled and posted ideas between two dates (defaults: today through +30 days), plus unscheduled ideas still in progress.",
+      description: "Scheduled and posted ideas between two dates (defaults: today through +30 days), ideas still in progress that have a planned date in that range, and unscheduled ideas.",
       inputSchema: { from: z.string().optional(), to: z.string().optional() },
       annotations: { readOnlyHint: true },
     },
@@ -413,9 +422,12 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
         scheduled: ideas
           .filter((i) => i.scheduled_for && new Date(i.scheduled_for) >= start && new Date(i.scheduled_for) <= end)
           .map(({ id, title, status, platform, scheduled_for, format_name }) => ({ id, title, status, platform, scheduled_for, format_name })),
+        planned: ideas
+          .filter((i) => !i.scheduled_for && i.planned_for && i.status !== "posted" && new Date(i.planned_for) >= start && new Date(i.planned_for) <= end)
+          .map(({ id, title, status, platform, planned_for, format_name }) => ({ id, title, status, platform, planned_for, format_name })),
         unscheduled: ideas
           .filter((i) => !i.scheduled_for && i.status !== "posted")
-          .map(({ id, title, status, format_name }) => ({ id, title, status, format_name })),
+          .map(({ id, title, status, planned_for, format_name }) => ({ id, title, status, planned_for, format_name })),
       };
     }),
   );

@@ -1,16 +1,21 @@
 import Image from "next/image";
-import { Bookmark, ExternalLink, Eye, Heart, Play } from "lucide-react";
+import { Bookmark, ExternalLink, Eye, GalleryHorizontal, Heart, Play } from "lucide-react";
 import { compact } from "@/lib/format";
+import type { Slide } from "@/lib/queries";
 import { mediaSrc, thumbSrc } from "@/lib/thumbs";
+import { SlideshowPlayer } from "./slideshow-player";
 import { TilePlayer } from "./tile-player";
 
 // A vertical 9:16 card shaped like the Reel/TikTok it represents. With a
-// videoUrl it plays inline; otherwise it links to the original post.
+// videoUrl it plays inline, with slides it opens as a swipeable carousel
+// (TikTok slideshows with their music); otherwise it links to the original post.
 // The top-right corner is left free for actions (e.g. Save to Ideas).
 export function VideoTile({
   url,
   thumbnail,
   videoUrl,
+  slides,
+  audioUrl,
   hook,
   views,
   likes,
@@ -22,6 +27,8 @@ export function VideoTile({
   url?: string;
   thumbnail: string | null;
   videoUrl?: string | null;
+  slides?: Slide[] | null;
+  audioUrl?: string | null;
   hook: string;
   views: number;
   likes?: number;
@@ -32,6 +39,9 @@ export function VideoTile({
 }) {
   const src = thumbSrc(thumbnail);
   const playable = mediaSrc(videoUrl);
+  const deck = (slides ?? [])
+    .map((s) => ({ image: thumbSrc(s.image) ?? "", video: mediaSrc(s.video) }))
+    .filter((s) => s.image);
 
   const poster = (
     <>
@@ -50,11 +60,16 @@ export function VideoTile({
           {hook || <Play size={20} />}
         </div>
       )}
-      {(platform || label) && (
+      {(platform || label || deck.length > 1) && (
         <div className="pointer-events-none absolute left-1.5 top-1.5 flex items-center gap-1">
           {platform && (
             <span className="rounded bg-black/55 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white">
               {platform === "instagram" ? "IG" : platform === "tiktok" ? "TT" : platform}
+            </span>
+          )}
+          {deck.length > 1 && (
+            <span className="flex items-center gap-0.5 rounded bg-black/55 px-1.5 py-0.5 text-[9px] font-medium tabular-nums text-white" title={platform === "tiktok" ? "Photo slideshow" : "Carousel"}>
+              <GalleryHorizontal size={9} /> {deck.length}
             </span>
           )}
           {label && <span className="rounded bg-white/90 px-1.5 py-0.5 text-[9px] font-semibold text-black">{label}</span>}
@@ -77,23 +92,38 @@ export function VideoTile({
 
   const frame = `group relative aspect-[9/16] shrink-0 overflow-hidden rounded-xl bg-media ${size === "sm" ? "w-28" : "w-full"}`;
 
+  const openOriginal = url && (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      title="Open original"
+      aria-label="Open original post"
+      className="absolute bottom-1.5 right-1.5 z-10 grid size-6 place-items-center rounded-full bg-black/45 text-white hover:bg-black/70"
+    >
+      <ExternalLink size={11} />
+    </a>
+  );
+
+  const audio = mediaSrc(audioUrl);
+  // A single TikTok photo still plays, with its sound.
+  if (deck.length > 1 || (deck.length === 1 && audio)) {
+    return (
+      <div className={frame}>
+        <SlideshowPlayer slides={deck} audio={audio} originalUrl={url} label={hook || "carousel"}>
+          {poster}
+          {openOriginal}
+        </SlideshowPlayer>
+      </div>
+    );
+  }
+
   if (playable) {
     return (
       <div className={frame}>
         <TilePlayer src={playable} originalUrl={url} label={hook || "video"}>
           {poster}
-          {url && (
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              title="Open original"
-              aria-label="Open original post"
-              className="absolute bottom-1.5 right-1.5 z-10 grid size-6 place-items-center rounded-full bg-black/45 text-white hover:bg-black/70"
-            >
-              <ExternalLink size={11} />
-            </a>
-          )}
+          {openOriginal}
         </TilePlayer>
       </div>
     );

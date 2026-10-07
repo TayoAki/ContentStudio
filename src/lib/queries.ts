@@ -17,6 +17,19 @@ export type Format = {
   ideas: number;
 };
 
+export type MediaType = "video" | "carousel" | "photo";
+export type Slide = { image: string; video?: string };
+
+export function parseSlides(raw: unknown): Slide[] | null {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) && v.length > 0 ? (v as Slide[]) : null;
+  } catch {
+    return null;
+  }
+}
+
 export type TrendingPost = {
   id: string;
   platform: string;
@@ -36,6 +49,9 @@ export type TrendingPost = {
   format_name: string | null;
   creator_id: string | null;
   video_url: string | null;
+  media_type: MediaType | null;
+  slides: Slide[] | null;
+  audio_url: string | null;
   handle: string;
   followers: number;
   save_rate: number;
@@ -70,7 +86,8 @@ export type Idea = {
   notes: string;
   status: IdeaStatus;
   platform: string;
-  scheduled_for: string | null;
+  scheduled_for: string | null; // publish date: Ready and Scheduled only
+  planned_for: string | null; // target date any stage can carry
   created_by: string;
   assets: number;
   // The trending video this idea replicates, if it was saved from Discover.
@@ -82,6 +99,11 @@ export type Idea = {
   source_views: number | null;
   source_likes: number | null;
   source_saves: number | null;
+  source_platform: string | null;
+  source_video_url: string | null;
+  source_media_type: MediaType | null;
+  source_slides: Slide[] | null;
+  source_audio_url: string | null;
   position: number | null;
   cover_url: string | null; // first attached image, for board and calendar thumbnails
   cover_kind: string | null;
@@ -170,7 +192,7 @@ export function getFormat(ws: string, formatId: string): Format | undefined {
 }
 
 export function listTrendingPosts(ws: string, opts: { nicheId?: string; formatId?: string } = {}): TrendingPost[] {
-  return all<TrendingPost>(
+  return all<Omit<TrendingPost, "slides"> & { slides: string | null }>(
     `SELECT t.*, f.name AS format_name, c.handle, c.followers,
        COALESCE(t.saves * 1.0 / NULLIF(t.views, 0), 0) AS save_rate,
        COALESCE(t.views * 1.0 / NULLIF(c.followers, 0), 0) AS reach_multiple
@@ -182,7 +204,7 @@ export function listTrendingPosts(ws: string, opts: { nicheId?: string; formatId
     opts.nicheId ?? null,
     opts.formatId ?? null,
     ws,
-  );
+  ).map((p) => ({ ...p, slides: parseSlides(p.slides) }));
 }
 
 // Breakout = account is young and grew fast in the last 30 days.
@@ -205,12 +227,13 @@ export function listCreators(ws: string, nicheId?: string): Creator[] {
 // ---------- Recreate ----------
 
 export function listIdeas(ws: string): Idea[] {
-  return all<Idea>(
+  return all<Omit<Idea, "source_slides"> & { source_slides: string | null }>(
     `SELECT i.*, f.name AS format_name, (SELECT COUNT(*) FROM assets a WHERE a.idea_id = i.id) AS assets,
        (SELECT a.url FROM assets a WHERE a.idea_id = i.id AND a.kind IN ('image', 'video') ORDER BY a.kind = 'video', a.created_at LIMIT 1) AS cover_url,
        (SELECT a.kind FROM assets a WHERE a.idea_id = i.id AND a.kind IN ('image', 'video') ORDER BY a.kind = 'video', a.created_at LIMIT 1) AS cover_kind,
        t.url AS source_url, t.thumbnail_url AS source_thumbnail, t.hook AS source_hook, c.handle AS source_handle,
-       t.views AS source_views, t.likes AS source_likes, t.saves AS source_saves
+       t.views AS source_views, t.likes AS source_likes, t.saves AS source_saves, t.platform AS source_platform,
+       t.video_url AS source_video_url, t.media_type AS source_media_type, t.slides AS source_slides, t.audio_url AS source_audio_url
      FROM ideas i
      LEFT JOIN formats f ON f.id = i.format_id
      LEFT JOIN trending_posts t ON t.id = i.source_post_id
@@ -218,7 +241,7 @@ export function listIdeas(ws: string): Idea[] {
      WHERE i.workspace_id = ?
      ORDER BY COALESCE(i.position, 1e15), i.created_at ASC`,
     ws,
-  );
+  ).map((i) => ({ ...i, source_slides: parseSlides(i.source_slides) }));
 }
 
 // trending post id -> idea id, for showing "Saved" on videos in Discover.

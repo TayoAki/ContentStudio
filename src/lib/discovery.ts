@@ -1,7 +1,9 @@
 import "server-only";
 import { upsertCreator, upsertTrendingPost } from "./ingest";
 import { warmThumbs } from "./thumbs";
-import { fetchInstagramProfile, fetchTikTokProfileVideos, searchInstagramReels } from "./integrations/scrapecreators";
+import { fetchInstagramProfile, fetchTikTokProfileVideos, searchInstagramReels, type ScrapedPost } from "./integrations/scrapecreators";
+
+const images = (posts: ScrapedPost[]) => posts.flatMap((p) => [p.thumbnail_url, ...(p.slides ?? []).map((s) => s.image)]);
 
 // Scrape Creators -> workspace data. Shared by the MCP tools and the Discover UI.
 
@@ -14,13 +16,13 @@ export async function syncCreators(ws: string, platform: "tiktok" | "instagram",
       if (platform === "tiktok") {
         const posts = await fetchTikTokProfileVideos(ws, handle);
         posts.forEach((p) => upsertTrendingPost(ws, { ...p, niche_id: nicheId }));
-        warmThumbs([...posts.map((p) => p.thumbnail_url), posts[0]?.creator.avatar_url]);
+        warmThumbs([...images(posts), posts[0]?.creator.avatar_url]);
         results[handle] = posts.length;
       } else {
         const { creator, posts } = await fetchInstagramProfile(ws, handle);
         upsertCreator(ws, { ...creator, niche_id: nicheId, source: "scrapecreators", sells_is_guess: true });
         posts.forEach((p) => upsertTrendingPost(ws, { ...p, niche_id: nicheId }));
-        warmThumbs([...posts.map((p) => p.thumbnail_url), creator.avatar_url as string | undefined]);
+        warmThumbs([...images(posts), creator.avatar_url as string | undefined]);
         results[handle] = posts.length;
       }
     } catch (err) {

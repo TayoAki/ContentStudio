@@ -218,7 +218,11 @@ const COLUMNS: [table: string, column: string, definition: string][] = [
   ["creators", "avatar_url", "TEXT"],
   ["ideas", "source_post_id", "TEXT"], // the trending video this idea replicates
   ["ideas", "position", "REAL"], // order within its board column (lower = higher priority)
+  ["ideas", "planned_for", "TEXT"], // target date any stage can keep (scheduled_for is the publish date)
   ["trending_posts", "video_url", "TEXT"], // platform CDN video, played inline via /api/media
+  ["trending_posts", "media_type", "TEXT"], // video | carousel | photo
+  ["trending_posts", "slides", "TEXT"], // JSON [{image, video?}] for carousels and TikTok slideshows
+  ["trending_posts", "audio_url", "TEXT"], // a TikTok slideshow's music track
   ["assets", "mime", "TEXT"], // uploaded files only
   ["assets", "size", "INTEGER"],
   ["assets", "filename", "TEXT"],
@@ -229,10 +233,11 @@ function migrate(conn: DatabaseSync) {
     const exists = conn.prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`).get(column);
     if (!exists) conn.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
-  // Only Ready work can carry a publish date; clear dates left on earlier stages.
-  if (conn.prepare("SELECT 1 FROM pragma_table_info('ideas') WHERE name = 'scheduled_for'").get()) {
-    conn.exec("UPDATE ideas SET scheduled_for = NULL WHERE status IN ('idea', 'scripting', 'producing') AND scheduled_for IS NOT NULL");
-  }
+  // Only Ready work carries a publish date; a date on an earlier stage is a plan, so keep it as one.
+  conn.exec(`UPDATE ideas SET planned_for = COALESCE(planned_for, scheduled_for), scheduled_for = NULL
+             WHERE status IN ('idea', 'scripting', 'producing') AND scheduled_for IS NOT NULL`);
+  // TikTok slideshows used to store their music track as the video.
+  conn.exec("UPDATE trending_posts SET audio_url = COALESCE(audio_url, video_url), video_url = NULL WHERE video_url LIKE '%.mp3%'");
 }
 
 const globalForDb = globalThis as unknown as { __csDb?: DatabaseSync };

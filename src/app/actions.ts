@@ -13,6 +13,7 @@ import {
   setFormatStatus as setFormatStatusFor,
   attachAsset,
   deleteAssetRow,
+  planIdea,
   quickAddIdea,
   reorderColumn,
   saveVideoAsIdea,
@@ -62,6 +63,7 @@ export async function createIdeaFromFormat(form: FormData) {
 export async function saveIdea(form: FormData) {
   const { workspaceId: ws } = await requireSession();
   const date = field(form, "scheduled_for");
+  const planned = field(form, "planned_for");
   const status = field(form, "status") as IdeaStatus;
   await guarded(() => {
     updateIdea(ws, field(form, "id"), {
@@ -73,6 +75,7 @@ export async function saveIdea(form: FormData) {
       status: IDEA_STATUSES.includes(status) ? status : undefined,
       // The date field only exists for Ready/Scheduled ideas; leave the date alone otherwise.
       scheduled_for: form.has("scheduled_for") ? (date ? new Date(`${date}T12:00:00`).toISOString() : null) : undefined,
+      planned_for: form.has("planned_for") ? planned || null : undefined,
     });
   });
   revalidatePath("/recreate");
@@ -191,6 +194,19 @@ export async function setIdeaDate(ideaId: string, when: string | null): Promise<
   if (typeof ideaId !== "string" || (when !== null && typeof when !== "string")) return { error: "Bad request" };
   try {
     scheduleIdea(ws, ideaId, when);
+  } catch (err) {
+    if (err instanceof IngestError) return { error: err.message };
+    throw err;
+  }
+  revalidatePath("/recreate");
+  return {};
+}
+
+export async function setIdeaPlannedDate(ideaId: string, when: string | null): Promise<{ error?: string }> {
+  const { workspaceId: ws } = await requireSession();
+  if (typeof ideaId !== "string" || (when !== null && typeof when !== "string")) return { error: "Bad request" };
+  try {
+    planIdea(ws, ideaId, when);
   } catch (err) {
     if (err instanceof IngestError) return { error: err.message };
     throw err;
