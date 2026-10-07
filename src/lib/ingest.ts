@@ -57,19 +57,37 @@ export function upsertCreator(ws: string, input: Record<string, unknown>): strin
     .get(ws, platform, handle) as { id: string } | undefined;
   const creatorId = existing?.id ?? id("cr");
   run(
-    `INSERT INTO creators (id, workspace_id, platform, handle, display_name, niche_id, followers, followers_30d_ago, first_post_at, source, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `INSERT INTO creators (id, workspace_id, platform, handle, display_name, niche_id, followers, followers_30d_ago, first_post_at, source,
+       category, sells, sells_url, bio, avatar_url, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(workspace_id, platform, handle) DO UPDATE SET
        display_name = COALESCE(excluded.display_name, display_name),
        niche_id = COALESCE(excluded.niche_id, niche_id),
        followers = CASE WHEN excluded.followers > 0 THEN excluded.followers ELSE followers END,
        followers_30d_ago = CASE WHEN excluded.followers_30d_ago > 0 THEN excluded.followers_30d_ago ELSE followers_30d_ago END,
        first_post_at = COALESCE(excluded.first_post_at, first_post_at),
+       category = COALESCE(excluded.category, category),
+       sells = CASE WHEN ? THEN COALESCE(sells, excluded.sells) ELSE COALESCE(excluded.sells, sells) END,
+       sells_url = CASE WHEN ? THEN COALESCE(sells_url, excluded.sells_url) ELSE COALESCE(excluded.sells_url, sells_url) END,
+       bio = COALESCE(excluded.bio, bio),
+       avatar_url = COALESCE(excluded.avatar_url, avatar_url),
        updated_at = datetime('now')`,
     creatorId, ws, platform, handle, optStr(input.display_name), owned(ws, "niches", optStr(input.niche_id)),
     num(input.followers), num(input.followers_30d_ago), optStr(input.first_post_at), str(input.source, "manual"),
+    optStr(input.category), optStr(input.sells), optStr(input.sells_url), optStr(input.bio), optStr(input.avatar_url),
+    // Auto-detected labels from a sync never replace ones a person or Claude set.
+    input.sells_is_guess ? 1 : 0, input.sells_is_guess ? 1 : 0,
   );
   return creatorId;
+}
+
+// Edits the research labels on an account (category, what it sells).
+export function updateCreatorMeta(ws: string, creatorId: string, patch: { category?: string; sells?: string; sells_url?: string }) {
+  owned(ws, "creators", creatorId);
+  run(
+    "UPDATE creators SET category = ?, sells = ?, sells_url = ? WHERE id = ? AND workspace_id = ?",
+    optStr(patch.category), optStr(patch.sells), optStr(patch.sells_url), creatorId, ws,
+  );
 }
 
 export function upsertTrendingPost(ws: string, input: Record<string, unknown>): string {

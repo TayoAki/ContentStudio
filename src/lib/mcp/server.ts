@@ -37,6 +37,8 @@ import {
   listPostsWithFunnel,
   listRecentEvents,
   listTrendingPosts,
+  groupByCategory,
+  listTrendAccounts,
 } from "@/lib/queries";
 
 // The ContentStudio MCP server: every step of discover -> recreate -> track
@@ -75,6 +77,11 @@ const creatorShape = {
   followers_30d_ago: z.number().int().optional().describe("Follower count ~30 days ago; drives the breakout score"),
   first_post_at: z.string().optional().describe("ISO date of the account's first post (account age)"),
   source: z.string().optional().describe("virlo | scrapecreators | manual"),
+  category: z.string().optional().describe('Trend type this account belongs to, e.g. "AI models", "Colour & outfit guides". Accounts are grouped by it in Discover.'),
+  sells: z.string().optional().describe('What the account monetises, e.g. "Own clothing brand", "Digital style guide (Gumroad)", "Affiliate links (ShopMy)"'),
+  sells_url: z.string().optional(),
+  bio: z.string().optional(),
+  avatar_url: z.string().optional(),
 };
 
 const trendingShape = {
@@ -186,10 +193,30 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
     "save_creators",
     {
       title: "Add or update creators",
-      description: "Upsert creator accounts (by platform + handle) so breakout accounts can be ranked.",
+      description: "Upsert creator accounts (by platform + handle). Use this to label each account's trend type (category) and what it sells after researching it.",
       inputSchema: { creators: z.array(z.object(creatorShape)).min(1) },
     },
     handle(({ creators }: { creators: Record<string, unknown>[] }) => ({ ids: creators.map((x) => upsertCreator(ws, x)) })),
+  );
+
+  server.registerTool(
+    "list_trend_accounts",
+    {
+      title: "List trend accounts",
+      description: "Accounts in a niche grouped by trend type, each with followers, account age, 30-day growth, what it sells, and its top videos (views, saves, hooks). This is the main Discover view.",
+      inputSchema: { niche_id: z.string(), videos_per_account: z.number().int().min(1).max(12).optional() },
+      annotations: { readOnlyHint: true },
+    },
+    handle(({ niche_id, videos_per_account = 4 }: { niche_id: string; videos_per_account?: number }) =>
+      groupByCategory(listTrendAccounts(ws, niche_id, videos_per_account)).map(([category, accounts]) => ({
+        category,
+        accounts: accounts.map((a) => ({
+          id: a.id, handle: a.handle, platform: a.platform, followers: a.followers, account_age_days: a.account_age_days,
+          growth_30d: a.growth_30d, sells: a.sells, sells_url: a.sells_url, bio: a.bio, total_views: a.total_views,
+          top_videos: a.top_videos.map((v) => ({ url: v.url, hook: v.hook, views: v.views, saves: v.saves, format: v.format_name })),
+        })),
+      })),
+    ),
   );
 
   server.registerTool(
@@ -522,10 +549,11 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
             text: `Run the ContentStudio loop for the "${niche}" niche:
 1. list_niches; create it with save_niche if missing.
 2. Find what's trending: search_instagram_reels with the niche keywords, then sync_creators for the most promising handles (TikTok and Instagram); use the Virlo tools too if available. Store everything with add_trending_posts (include creator follower counts and 30-day growth).
-3. Look for accounts that are new and grew fast, and for educational, save-worthy posts. Cluster the outliers into replicable formats with save_format (structure as timed beats, why_it_works, example_urls).
-4. Check get_format_performance so formats that already converted for us get priority.
-5. Pick the strongest format, call get_format_brief, and write ${count ?? "5"} scripts with save_ideas.
-6. Schedule them on open days with update_idea(scheduled_for) using get_calendar.
+3. Review list_trend_accounts. Label every account with a trend type (e.g. "AI models", "Colour & outfit guides") and what it sells via save_creators. Favour accounts that are new and grew fast, and educational, save-worthy videos.
+4. Cluster the outlier videos into replicable formats with save_format (structure as timed beats, why_it_works, example_urls).
+5. Check get_format_performance so formats that already converted for us get priority.
+6. Pick the strongest format, call get_format_brief, and write ${count ?? "5"} scripts with save_ideas.
+7. Schedule them on open days with update_idea(scheduled_for) using get_calendar.
 Summarise what you found and what you queued.`,
           },
         },

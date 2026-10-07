@@ -13,7 +13,7 @@ Next.js (App Router, Cache Components on) + Tailwind v4 + `node:sqlite`.
 
 When asked to research a niche or recreate a format, record results in the app rather than leaving them in chat. Use the `contentstudio` MCP server (`.mcp.json`; tools defined in `src/lib/mcp/server.ts`). Typical loop:
 
-1. Pull trending videos (Virlo MCP or `sync_scrapecreators`) → `add_trending_posts`.
+1. Find accounts and videos (`search_instagram_reels`, `sync_creators`, or Virlo MCP), then label each account's trend type and what it sells with `save_creators` → `add_trending_posts`.
 2. Cluster them into formats → `save_format` with `example_urls`.
 3. `get_format_brief`, write scripts → `save_ideas`; schedule with `update_idea`.
 4. Generate media → `add_assets` linked by `idea_id`.

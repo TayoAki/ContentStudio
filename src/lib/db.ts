@@ -209,6 +209,22 @@ CREATE INDEX IF NOT EXISTS ideas_ws ON ideas(workspace_id);
 CREATE INDEX IF NOT EXISTS trending_ws ON trending_posts(workspace_id, niche_id);
 `;
 
+// Additive migrations for databases created by an earlier schema.
+const COLUMNS: [table: string, column: string, definition: string][] = [
+  ["creators", "category", "TEXT"], // trend archetype, e.g. "Colour & outfit guides"
+  ["creators", "sells", "TEXT"], // what the account monetises, e.g. "Digital style guide (Gumroad)"
+  ["creators", "sells_url", "TEXT"],
+  ["creators", "bio", "TEXT"],
+  ["creators", "avatar_url", "TEXT"],
+];
+
+function migrate(conn: DatabaseSync) {
+  for (const [table, column, definition] of COLUMNS) {
+    const exists = conn.prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`).get(column);
+    if (!exists) conn.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
 const globalForDb = globalThis as unknown as { __csDb?: DatabaseSync };
 
 export function db(): DatabaseSync {
@@ -222,6 +238,7 @@ export function db(): DatabaseSync {
       throw new Error(`${DB_PATH} predates multi-tenancy. Delete it (it only held demo data) and restart.`);
     }
     conn.exec(SCHEMA);
+    migrate(conn);
     // Local dev gets a demo login (demo@contentstudio.dev / demo-password) with sample data.
     const { n } = conn.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
     const wantSeed = process.env.SEED_DEMO_DATA ? process.env.SEED_DEMO_DATA === "true" : process.env.NODE_ENV !== "production";

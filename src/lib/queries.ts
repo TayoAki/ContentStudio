@@ -34,6 +34,7 @@ export type TrendingPost = {
   source: string;
   format_id: string | null;
   format_name: string | null;
+  creator_id: string | null;
   handle: string;
   followers: number;
   save_rate: number;
@@ -51,6 +52,11 @@ export type Creator = {
   account_age_days: number;
   source: string;
   top_format: string | null;
+  category: string | null;
+  sells: string | null;
+  sells_url: string | null;
+  bio: string | null;
+  avatar_url: string | null;
 };
 
 export type Idea = {
@@ -119,7 +125,12 @@ const one = <T>(sql: string, ...args: (string | number | null)[]) =>
 // ---------- Discover ----------
 
 export function listNiches(ws: string): Niche[] {
-  return all<Niche>("SELECT id, name, keywords FROM niches WHERE workspace_id = ? ORDER BY name", ws);
+  // Busiest niche first so it's the default view.
+  return all<Niche>(
+    `SELECT n.id, n.name, n.keywords FROM niches n WHERE n.workspace_id = ?
+     ORDER BY (SELECT COUNT(*) FROM trending_posts t WHERE t.niche_id = n.id) DESC, n.created_at DESC`,
+    ws,
+  );
 }
 
 export function listFormats(ws: string, nicheId?: string): Format[] {
@@ -164,7 +175,7 @@ export function listCreators(ws: string, nicheId?: string): Creator[] {
     `SELECT c.id, c.platform, c.handle, COALESCE(c.display_name, c.handle) AS display_name, c.followers, c.followers_30d_ago,
        COALESCE((c.followers - c.followers_30d_ago) * 1.0 / NULLIF(c.followers_30d_ago, 0), 0) AS growth_30d,
        CAST(julianday('now') - julianday(COALESCE(c.first_post_at, c.updated_at)) AS INTEGER) AS account_age_days,
-       c.source,
+       c.source, c.category, c.sells, c.sells_url, c.bio, c.avatar_url,
        (SELECT f.name FROM trending_posts t JOIN formats f ON f.id = t.format_id
          WHERE t.creator_id = c.id GROUP BY f.id ORDER BY SUM(t.views) DESC LIMIT 1) AS top_format
      FROM creators c
@@ -347,4 +358,53 @@ export function listFormatPerformance(ws: string): FormatPerformance[] {
     byFormat.set(key, row);
   }
   return [...byFormat.values()].sort((a, b) => b.revenue_cents - a.revenue_cents);
+}
+
+// Discover's main view: each account with its best videos, grouped by the
+// trend category it belongs to ("AI models", "Colour & outfit guides", ...).
+export type TrendAccount = Creator & {
+  total_views: number;
+  video_count: number;
+  best: TrendingPost | null;
+  top_videos: TrendingPost[];
+};
+
+export function listTrendAccounts(ws: string, nicheId?: string, videosPerAccount = 6): TrendAccount[] {
+  const posts = listTrendingPosts(ws, { nicheId });
+  const byCreator = new Map<string, TrendingPost[]>();
+  for (const p of posts) {
+    if (!p.creator_id) continue;
+    byCreator.set(p.creator_id, [...(byCreator.get(p.creator_id) ?? []), p]);
+  }
+  // An account belongs to a niche if it was filed there or has videos there.
+  const filed = nicheId ? listCreatorIdsInNiche(ws, nicheId) : null;
+  return listCreators(ws)
+    .filter((c) => !filed || byCreator.has(c.id) || filed.has(c.id))
+    .map((c) => {
+      const videos = (byCreator.get(c.id) ?? []).sort((a, b) => b.views - a.views);
+      return {
+        ...c,
+        total_views: videos.reduce((sum, v) => sum + v.views, 0),
+        video_count: videos.length,
+        best: videos[0] ?? null,
+        top_videos: videos.slice(0, videosPerAccount),
+      };
+    })
+    .sort((a, b) => (b.best?.views ?? 0) - (a.best?.views ?? 0));
+}
+
+function listCreatorIdsInNiche(ws: string, nicheId: string): Set<string> {
+  return new Set(all<{ id: string }>("SELECT id FROM creators WHERE workspace_id = ? AND niche_id = ?", ws, nicheId).map((r) => r.id));
+}
+
+export function groupByCategory(accounts: TrendAccount[]): [string, TrendAccount[]][] {
+  const groups = new Map<string, TrendAccount[]>();
+  for (const a of accounts) {
+    const key = a.category?.trim() || "Uncategorised";
+    groups.set(key, [...(groups.get(key) ?? []), a]);
+  }
+  // Biggest category first, "Uncategorised" last.
+  return [...groups.entries()].sort(([ka, a], [kb, b]) =>
+    ka === "Uncategorised" ? 1 : kb === "Uncategorised" ? -1 : b.reduce((s, x) => s + x.total_views, 0) - a.reduce((s, x) => s + x.total_views, 0),
+  );
 }

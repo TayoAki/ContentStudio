@@ -1,5 +1,6 @@
 import "server-only";
 import { IngestError, consumeQuota } from "@/lib/ingest";
+import { classifySells } from "@/lib/monetization";
 
 // Client for https://api.scrapecreators.com (auth: x-api-key). One platform
 // key is shared by every workspace, so each call is metered per workspace.
@@ -33,7 +34,7 @@ export type ScrapedPost = {
   saves: number;
   posted_at: string | null;
   source: "scrapecreators";
-  creator: { platform: "tiktok" | "instagram"; handle: string; display_name?: string; followers?: number };
+  creator: { platform: "tiktok" | "instagram"; handle: string; display_name?: string; followers?: number; bio?: string; avatar_url?: string };
 };
 
 const firstLine = (s: string) => s.split(/[.!?\n]/)[0]?.trim() ?? "";
@@ -47,7 +48,7 @@ type Aweme = {
   create_time_utc?: string;
   statistics?: { play_count?: number; digg_count?: number; comment_count?: number; share_count?: number; collect_count?: number };
   video?: { cover?: { url_list?: string[] } };
-  author?: { unique_id?: string; nickname?: string; follower_count?: number };
+  author?: { unique_id?: string; nickname?: string; follower_count?: number; signature?: string; avatar_thumb?: { url_list?: string[] } };
 };
 
 function fromAweme(v: Aweme, fallbackHandle: string): ScrapedPost {
@@ -65,7 +66,14 @@ function fromAweme(v: Aweme, fallbackHandle: string): ScrapedPost {
     saves: v.statistics?.collect_count ?? 0,
     posted_at: v.create_time_utc ?? null,
     source: "scrapecreators",
-    creator: { platform: "tiktok", handle, display_name: v.author?.nickname, followers: v.author?.follower_count },
+    creator: {
+      platform: "tiktok",
+      handle,
+      display_name: v.author?.nickname,
+      followers: v.author?.follower_count,
+      bio: v.author?.signature,
+      avatar_url: v.author?.avatar_thumb?.url_list?.[0],
+    },
   };
 }
 
@@ -90,13 +98,35 @@ type IgNode = {
   edge_media_to_caption?: { edges?: { node?: { text?: string } }[] };
 };
 
-export async function fetchInstagramProfile(ws: string, handle: string): Promise<{ creator: ScrapedPost["creator"] & { first_post_at?: string }; posts: ScrapedPost[] }> {
+export async function fetchInstagramProfile(ws: string, handle: string): Promise<{ creator: ScrapedPost["creator"] & Record<string, unknown>; posts: ScrapedPost[] }> {
   const clean = handle.replace(/^@/, "");
   const data = await call<{
-    data?: { user?: { username?: string; full_name?: string; edge_followed_by?: { count?: number }; edge_owner_to_timeline_media?: { edges?: { node: IgNode }[] } } };
+    data?: {
+      user?: {
+        username?: string;
+        full_name?: string;
+        biography?: string;
+        external_url?: string | null;
+        bio_links?: { url?: string }[];
+        profile_pic_url?: string;
+        profile_pic_url_hd?: string;
+        edge_followed_by?: { count?: number };
+        edge_owner_to_timeline_media?: { edges?: { node: IgNode }[] };
+      };
+    };
   }>(ws, "/v1/instagram/profile", { handle: clean });
   const user = data.data?.user;
-  const creator = { platform: "instagram" as const, handle: user?.username ?? clean, display_name: user?.full_name, followers: user?.edge_followed_by?.count };
+  const sells = classifySells([user?.external_url, ...(user?.bio_links ?? []).map((l) => l.url)]);
+  const creator = {
+    platform: "instagram" as const,
+    handle: user?.username ?? clean,
+    display_name: user?.full_name,
+    followers: user?.edge_followed_by?.count,
+    bio: user?.biography,
+    avatar_url: user?.profile_pic_url_hd ?? user?.profile_pic_url,
+    sells: sells?.sells,
+    sells_url: sells?.url,
+  };
   const posts = (user?.edge_owner_to_timeline_media?.edges ?? []).map(({ node }): ScrapedPost => {
     const caption = node.edge_media_to_caption?.edges?.[0]?.node?.text ?? "";
     return {

@@ -34,7 +34,7 @@ export function seed(conn: DatabaseSync) {
     run("INSERT INTO memberships (user_id, workspace_id) VALUES ('usr_demo', ?)", WS);
     run(
       `INSERT INTO niches (workspace_id, id, name, keywords) VALUES ('${WS}', ?, ?, ?), ('${WS}', ?, ?, ?)`,
-      "fashion", "Men's fashion", "mens style, outfit ideas, style tips, capsule wardrobe",
+      "fashion", "Men's fashion", "colour combinations, outfit ideas, mens style tips, capsule wardrobe",
       "fitness", "Fitness", "workout, form tips, hypertrophy, mobility",
     );
 
@@ -50,7 +50,7 @@ export function seed(conn: DatabaseSync) {
           "End card: 'Save this for your next fit'",
         ],
         "Instantly scannable, high save rate (people bookmark outfit references), works with zero talking.",
-        "winner",
+        "testing",
       ],
       [
         "fmt_stop_wearing", "fashion", "Stop Wearing X, Wear Y",
@@ -58,6 +58,17 @@ export function seed(conn: DatabaseSync) {
         ["Hook: 'Stop wearing ___ with ___'", "Show the mistake", "Show the fix", "Why it works (1 line)", "CTA: comment STYLE for the full guide"],
         "Pattern interrupt hook + mild controversy drives comments; ideal for ManyChat keyword CTAs.",
         "testing",
+      ],
+      [
+        "fmt_colour_guide", "fashion", "Colour Combination Guide",
+        "Flat-lay or on-body outfits labelled with the colours that pair, one combo per beat. Built to be saved.",
+        [
+          "0-1s: Title card, e.g. 'Colour combos that always work'",
+          "1-8s: 4-6 outfits, each labelled 'navy + camel', 'olive + cream'…",
+          "Last beat: 'Save this for your next fit'",
+        ],
+        "Pure reference content: people save it to use later, which the algorithm reads as high value. No talking, so it works across languages.",
+        "winner",
       ],
       [
         "fmt_formula", "fashion", "Outfit Formula Breakdown",
@@ -81,44 +92,58 @@ export function seed(conn: DatabaseSync) {
       );
     }
 
-    const creators: [string, string, string, string, number, number, number][] = [
-      ["cr_1", "instagram", "fitsbydre", "Dre | Style Tips", 184_000, 41_000, 94],
-      ["cr_2", "tiktok", "blazerseason", "Blazer Season", 312_000, 88_000, 61],
-      ["cr_3", "instagram", "thecapsuleguy", "The Capsule Guy", 96_000, 52_000, 140],
-      ["cr_4", "tiktok", "menswear.math", "Menswear Math", 58_000, 9_000, 38],
-      ["cr_5", "instagram", "oldmoneyfits", "Old Money Fits", 1_200_000, 1_150_000, 1400],
-      ["cr_6", "tiktok", "liftlab", "Lift Lab", 140_000, 70_000, 120],
+    // Accounts from real research in the fashion niche (figures as reported at
+    // the time); the "AI models" row is a labelled placeholder.
+    type SeedCreator = {
+      id: string; platform: string; handle: string; name: string; niche: string; followers: number;
+      prev: number; ageDays: number | null; category: string; sells: string | null; sellsUrl: string | null;
+    };
+    const creators: SeedCreator[] = [
+      { id: "cr_1", platform: "instagram", handle: "layrandlayr", name: "LAYR", niche: "fashion", followers: 1_000_000, prev: 0, ageDays: 135,
+        category: "Colour & outfit guides", sells: "Own clothing brand", sellsUrl: "https://layr-layr.com" },
+      { id: "cr_2", platform: "instagram", handle: "styleformula.daily", name: "Style Formula Daily", niche: "fashion", followers: 410_000, prev: 0, ageDays: null,
+        category: "Colour & outfit guides", sells: "Digital style guide (Gumroad)", sellsUrl: null },
+      { id: "cr_3", platform: "instagram", handle: "thestyleformulaa", name: "The Style Formula", niche: "fashion", followers: 303_000, prev: 0, ageDays: null,
+        category: "Colour & outfit guides", sells: "Style guide (Beacons)", sellsUrl: null },
+      { id: "cr_4", platform: "instagram", handle: "dresscodelab.co", name: "Dress Code Lab", niche: "fashion", followers: 160_000, prev: 0, ageDays: null,
+        category: "Colour & outfit guides", sells: "Affiliate links (ShopMy)", sellsUrl: null },
+      { id: "cr_5", platform: "instagram", handle: "example.ai.model", name: "Example account (demo placeholder)", niche: "fashion", followers: 240_000, prev: 120_000, ageDays: 70,
+        category: "AI models", sells: "Brand deals", sellsUrl: null },
+      { id: "cr_6", platform: "tiktok", handle: "liftlab", name: "Lift Lab (demo)", niche: "fitness", followers: 140_000, prev: 70_000, ageDays: 120,
+        category: "Form tips", sells: null, sellsUrl: null },
     ];
-    for (const [cid, platform, handle, name, followers, prev, ageDays] of creators) {
+    for (const c of creators) {
       run(
-        `INSERT INTO creators (workspace_id, id, platform, handle, display_name, niche_id, followers, followers_30d_ago, first_post_at, source)
-         VALUES ('${WS}', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        cid, platform, handle, name, cid === "cr_6" ? "fitness" : "fashion", followers, prev, iso(ageDays * DAY),
-        platform === "tiktok" ? "virlo" : "scrapecreators",
+        `INSERT INTO creators (workspace_id, id, platform, handle, display_name, niche_id, followers, followers_30d_ago, first_post_at, source, category, sells, sells_url)
+         VALUES ('${WS}', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        c.id, c.platform, c.handle, c.name, c.niche, c.followers, c.prev, c.ageDays === null ? null : iso(c.ageDays * DAY),
+        "scrapecreators", c.category, c.sells, c.sellsUrl,
       );
     }
 
-    const trending: [string, string, string, string, string | null, number, number][] = [
-      ["cr_1", "fmt_two_ways", "One blazer. Two completely different vibes.", "Navy textured vs cream double-breasted — which one?", "/samples/blazer-two-ways.webp", 2_400_000, 3],
-      ["cr_2", "fmt_two_ways", "Same jeans, two blazers, zero effort", "Light wash + navy, black denim + cream.", "/samples/blazer-two-ways.webp", 1_150_000, 5],
-      ["cr_4", "fmt_stop_wearing", "Stop wearing sneakers with blazers", "Do this instead 👇 comment LOAFER", null, 870_000, 2],
-      ["cr_3", "fmt_formula", "The only date-night formula you need", "Tee + blazer + straight denim + suede loafer", null, 640_000, 6],
-      ["cr_2", "fmt_stop_wearing", "Stop buying skinny jeans in 2026", "Straight leg changes everything.", null, 1_900_000, 9],
-      ["cr_5", "fmt_formula", "Old money summer formula", "Linen + loafers.", null, 450_000, 4],
-      ["cr_6", "fmt_form_fix", "You're squatting wrong (10 sec fix)", "Knees out, chest proud.", null, 3_100_000, 7],
+    // [creator, format, hook, views, saves (null = not reported), thumbnail, days ago]
+    const trending: [string, string, string, number, number | null, string | null, number][] = [
+      ["cr_1", "fmt_two_ways", "Couple outfit inspiration", 14_400_000, 478_000, "/samples/blazer-two-ways.webp", 40],
+      ["cr_1", "fmt_colour_guide", "Colour combinations", 12_200_000, null, null, 55],
+      ["cr_1", "fmt_formula", "Jeans guide", 12_100_000, null, null, 62],
+      ["cr_1", "fmt_colour_guide", "Office colour combos", 6_200_000, null, null, 30],
+      ["cr_2", "fmt_colour_guide", "Fall third-colour outfit ideas", 1_600_000, null, null, 12],
+      ["cr_3", "fmt_colour_guide", "Save this colour guide", 1_200_000, null, null, 9],
+      ["cr_4", "fmt_colour_guide", "Colour pairings that look elevated", 2_400_000, null, null, 18],
+      ["cr_5", "fmt_two_ways", "Same outfit, two moods (AI model demo)", 900_000, 41_000, null, 6],
+      ["cr_6", "fmt_form_fix", "You're squatting wrong (10 sec fix)", 3_100_000, 90_000, null, 7],
     ];
-    trending.forEach(([cid, fid, hook, caption, thumb, views, daysAgo], i) => {
-      const saveRate = fid === "fmt_two_ways" || fid === "fmt_formula" ? 0.06 + rand() * 0.04 : 0.015 + rand() * 0.02;
-      const platform = (creators.find((c) => c[0] === cid) ?? creators[0])[1];
+    trending.forEach(([cid, fid, hook, views, saves, thumb, daysAgo], i) => {
+      const c = creators.find((x) => x.id === cid)!;
       run(
         `INSERT INTO trending_posts (workspace_id, id, platform, url, creator_id, niche_id, format_id, caption, hook, thumbnail_url,
            views, likes, comments, shares, saves, posted_at, source)
          VALUES ('${WS}', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        `tp_${i + 1}`, platform, `https://example.com/${platform}/post/${i + 1}`, cid,
-        fid === "fmt_form_fix" ? "fitness" : "fashion", fid, caption, hook, thumb,
-        views, Math.round(views * (0.05 + rand() * 0.04)), Math.round(views * (0.002 + rand() * 0.006)),
-        Math.round(views * (0.01 + rand() * 0.02)), Math.round(views * saveRate), iso(daysAgo * DAY),
-        platform === "tiktok" ? "virlo" : "scrapecreators",
+        `tp_${i + 1}`, c.platform,
+        c.platform === "instagram" ? `https://www.instagram.com/${c.handle}/#demo-${i + 1}` : `https://www.tiktok.com/@${c.handle}#demo-${i + 1}`,
+        cid, c.niche, fid, hook, hook, thumb,
+        views, Math.round(views * (0.05 + rand() * 0.03)), Math.round(views * (0.002 + rand() * 0.004)), 0, saves ?? 0,
+        iso(daysAgo * DAY), "scrapecreators",
       );
     });
 

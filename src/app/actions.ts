@@ -11,6 +11,7 @@ import {
   createTrackedLink,
   recordPost,
   setFormatStatus as setFormatStatusFor,
+  updateCreatorMeta,
   updateIdea,
   upsertIdea,
   upsertNiche,
@@ -133,6 +134,18 @@ export async function runCreatorSync(form: FormData) {
   if (handles.length === 0) return flash("Enter at least one handle");
   const results = await syncCreators(ws, platform, handles, field(form, "niche_id") || null);
   await flash(Object.entries(results).map(([h, r]) => `@${h}: ${typeof r === "number" ? `${r} posts` : r}`).join(" · "));
+  revalidatePath("/discover");
+}
+
+export async function updateAccount(form: FormData) {
+  const { workspaceId: ws } = await requireSession();
+  await guarded(() =>
+    updateCreatorMeta(ws, field(form, "id"), {
+      category: field(form, "category"),
+      sells: field(form, "sells"),
+      sells_url: field(form, "sells_url"),
+    }),
+  );
   revalidatePath("/discover");
 }
 

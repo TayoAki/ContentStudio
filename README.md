@@ -4,7 +4,7 @@ Find a short-form format that's working in your niche, recreate it with Claude C
 
 | Module | What it does | Data in |
 |---|---|---|
-| **Discover** | Groups trending IG Reels / TikToks into replicable **formats**, flags **breakout creators** (young accounts growing fast), ranks posts by reach multiple (views ÷ followers) and save rate. | Virlo (MCP via Claude Code), Scrape Creators |
+| **Discover** | **Trend accounts** grouped by trend type (e.g. "AI models", "Colour & outfit guides") with followers, how fast they got there, their best videos as 9:16 tiles, and what they sell. Plus replicable **formats** and a top-videos wall ranked by reach multiple (views ÷ followers). | Scrape Creators (built in), Virlo (MCP via Claude Code) |
 | **Recreate** | Ideas pipeline, content calendar and asset library. "Copy Claude Code brief" packages a format + top examples; Claude pushes scripts and generated media back. | Claude Code → `/api/ingest/*` |
 | **Track** | Per-post funnel and revenue, tracked links, ManyChat keywords, live event feed, $ per 1k views. | Post metrics, `/l/:slug`, ManyChat, Stripe |
 
@@ -12,26 +12,42 @@ Find a short-form format that's working in your niche, recreate it with Claude C
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in what you have; everything is optional locally
+cp .env.example .env.local   # add SCRAPECREATORS_API_KEY to enable live research
 npm run dev                  # http://localhost:3000
 ```
 
-Requires Node 22+ (uses the built-in `node:sqlite`). The database is created at `data/contentstudio.db` and seeded with a demo men's-fashion niche; delete the file to reset.
+Requires Node 22.5+ (uses the built-in `node:sqlite`). Locally the database at `data/contentstudio.db` is seeded with a demo login, **demo@contentstudio.dev / demo-password**, holding a men's-fashion niche. Delete the file to reset.
+
+## Multi-tenant
+
+- Anyone can sign up at `/signup`; each account gets its own workspace. Every row is scoped by `workspace_id`, and writes reject ids from other workspaces.
+- Each workspace has its own **API key** (Settings → Connect Claude) for MCP and `/api/ingest/*`, plus its own ManyChat and Stripe webhook URLs and secrets.
+- The **Scrape Creators** key is a platform secret shared by every workspace, metered per workspace per day (`SCRAPECREATORS_DAILY_LIMIT_PER_WORKSPACE`, default 100).
+- Instagram/TikTok thumbnails are fetched server-side and cached next to the database, because the CDN links can't be hotlinked and expire.
+
+## Deploy (Railway)
+
+`railway.json` configures the build (Railpack, Node from `engines`) and a single replica. The service needs:
+
+1. A **volume** mounted at `/data`, plus `DATABASE_PATH=/data/contentstudio.db`. SQLite and the thumbnail cache live there, so keep it to **one replica**.
+2. Variables: `APP_URL` (the public URL), `SCRAPECREATORS_API_KEY`, and optionally `SCRAPECREATORS_DAILY_LIMIT_PER_WORKSPACE`.
+
+Moving to Postgres is the step that unlocks more than one replica; the schema is plain SQL to make that straightforward.
 
 ## Control it from Claude (MCP)
 
 The app is an MCP server at `/api/mcp` (streamable HTTP), so Claude Code can run the whole loop: research a niche, define formats, write and schedule scripts, attach media, mark posts live, create tracked links/keywords and read back performance.
 
-This repo ships a `.mcp.json`, so opening it in Claude Code picks the server up automatically (it reads `CONTENTSTUDIO_URL` and `CONTENTSTUDIO_API_KEY` from your shell). To add it elsewhere:
+This repo ships a `.mcp.json`, so opening it in Claude Code picks the server up automatically (set `CONTENTSTUDIO_URL` and `CONTENTSTUDIO_API_KEY` to your app URL and workspace API key). To add it elsewhere:
 
 ```bash
 claude mcp add --transport http contentstudio https://your-app.example.com/api/mcp \
-  --header "Authorization: Bearer $CONTENTSTUDIO_API_KEY"
+  --header "Authorization: Bearer <workspace API key from Settings>"
 ```
 
 | Stage | Tools |
 |---|---|
-| Discover | `list_niches`, `save_niche`, `get_discover_overview`, `list_trending_posts`, `add_trending_posts`, `save_creators`, `list_creators`, `sync_scrapecreators`, `save_format`, `get_format_brief` |
+| Discover | `list_niches`, `save_niche`, `get_discover_overview`, `list_trend_accounts`, `list_trending_posts`, `add_trending_posts`, `save_creators`, `list_creators`, `search_instagram_reels`, `sync_creators`, `get_usage`, `save_format`, `get_format_brief` |
 | Recreate | `list_ideas`, `get_idea`, `save_ideas`, `update_idea`, `add_assets`, `get_calendar` |
 | Track | `mark_posted`, `record_metrics`, `create_tracked_link`, `record_events`, `get_performance`, `get_format_performance`, `list_links_and_keywords` |
 
@@ -42,14 +58,14 @@ Pair it with Virlo's MCP server for trend data; Claude moves results from Virlo 
 ## How attribution works
 
 1. Each post gets a tracked link (`/l/<slug>`) and optionally a ManyChat keyword (e.g. comment **BLAZER**).
-2. ManyChat's *External Request* step posts `comment_keyword` / `dm_sent` events to `/api/webhooks/manychat`; the keyword maps the event to the post.
+2. ManyChat's *External Request* step posts `comment_keyword` / `dm_sent` events to your workspace's `/api/webhooks/manychat/<workspace id>` URL; the keyword maps the event to the post.
 3. The DM contains `/l/<slug>?c={{user_id}}`. The click is logged and the visitor is redirected with `cs_cid=<click id>` (+ UTM tags).
 4. Your checkout passes `cs_cid` to Stripe as `client_reference_id` (or `metadata.cs_cid`). `/api/webhooks/stripe` turns `checkout.session.completed` into a purchase attributed to the same post.
 5. Clicks on the plain link-in-bio (no post) are recorded as unattributed; use per-post keywords/links for exact attribution.
 
 ## API
 
-All ingest endpoints take a JSON object or array, with `Authorization: Bearer $CONTENTSTUDIO_API_KEY`.
+All ingest endpoints take a JSON object or array, with `Authorization: Bearer <workspace API key>`.
 
 | Endpoint | Body (key fields) |
 |---|---|
@@ -61,13 +77,12 @@ All ingest endpoints take a JSON object or array, with `Authorization: Bearer $C
 | `POST /api/ingest/posts` | `idea_id, platform, url, caption, published_at` |
 | `POST /api/ingest/metrics` | `post_id, views, likes, comments, shares, saves, profile_visits, follows` |
 | `POST /api/ingest/events` | `type, source, post_id? / keyword? / link_slug? / click_id?, value_cents` |
-| `POST /api/sync/scrapecreators` | `handles[], niche_id` — pulls recent TikTok videos for each creator |
-| `POST /api/webhooks/manychat` | header `x-contentstudio-secret`; `event, keyword, subscriber_id` |
-| `POST /api/webhooks/stripe` | Stripe-signed `checkout.session.completed` |
+| `POST /api/ingest/niches` | `name, keywords` |
+| `POST /api/webhooks/manychat/<workspace id>` | header `x-contentstudio-secret` (per workspace, see Settings); `event, keyword, subscriber_id` |
+| `POST /api/webhooks/stripe/<workspace id>` | Stripe-signed `checkout.session.completed` (signing secret saved in Settings) |
 
 ## Not built yet
 
-- Auth / multi-tenant workspaces (single-user MVP).
+- Team invites (one owner per workspace today) and billing/plans.
 - Automatic post-metric pulls from the Instagram Graph API / TikTok — push them to `/api/ingest/metrics` for now.
-- Instagram profile sync via Scrape Creators (TikTok is wired up).
 - File uploads — assets are stored as URLs.
