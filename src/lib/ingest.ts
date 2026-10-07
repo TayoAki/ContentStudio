@@ -193,16 +193,18 @@ export function saveVideoAsIdea(ws: string, postId: string, createdBy = "user"):
     Number(v.comments) > 0 && `${Number(v.comments).toLocaleString()} comments`,
   ].filter(Boolean).join(" · ");
   const notes = [
-    `Replicating ${handle}'s video: ${v.url}`,
+    `REFERENCE ONLY: don't repost this. Recreate the format with your own script and new media.`,
+    `Reference video by ${handle}: ${v.url}`,
     statsLine && `Stats when saved: ${statsLine}${Number(v.followers) > 0 ? ` (account: ${Number(v.followers).toLocaleString()} followers)` : ""}`,
     v.format_name && `Format: ${v.format_name}`,
+    hook && `Original hook: ${hook}`,
     v.caption && `Original caption: ${String(v.caption).slice(0, 500)}`,
     v.transcript && `Transcript: ${String(v.transcript).slice(0, 2000)}`,
   ].filter(Boolean).join("\n");
 
   const id = upsertIdea(ws, {
-    title: hook ? (hook.length > 80 ? `${hook.slice(0, 77)}…` : hook) : `Recreate ${handle} video`,
-    hook,
+    title: hook ? `Recreate: ${hook.length > 70 ? `${hook.slice(0, 67)}…` : hook}` : `Recreate ${handle}'s format`,
+    hook: "", // yours to write; the original is in the notes
     notes,
     format_id: v.format_id,
     platform: v.platform,
@@ -213,6 +215,11 @@ export function saveVideoAsIdea(ws: string, postId: string, createdBy = "user"):
   return { id, created: true };
 }
 
+// Scheduling rules: only finished (Ready) work gets a publish date. Earlier
+// stages carry no date, and the Scheduled column always has one.
+const EARLY_STAGES = ["idea", "scripting", "producing"];
+export const NOT_READY_TO_SCHEDULE = "Only ideas in Ready can be scheduled. Finish it and move it to Ready first.";
+
 // Merge-update: only the fields provided change.
 export function updateIdea(ws: string, ideaId: string, patch: Record<string, unknown>): string {
   const existing = db().prepare("SELECT * FROM ideas WHERE id = ? AND workspace_id = ?").get(ideaId, ws) as
@@ -220,7 +227,16 @@ export function updateIdea(ws: string, ideaId: string, patch: Record<string, unk
     | undefined;
   if (!existing) throw new IngestError(`Idea "${ideaId}" not found`);
   const defined = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
-  return upsertIdea(ws, { ...existing, ...defined, id: ideaId });
+  const next: Record<string, unknown> = { ...existing, ...defined, id: ideaId };
+  const status = String(next.status);
+  const dateChanged = (next.scheduled_for ?? null) !== (existing.scheduled_for ?? null);
+  if (EARLY_STAGES.includes(status)) {
+    if (dateChanged && next.scheduled_for) throw new IngestError(NOT_READY_TO_SCHEDULE);
+    next.scheduled_for = null;
+  }
+  if (status === "scheduled" && !next.scheduled_for) throw new IngestError("Pick a publish date to schedule it.");
+  if (status === "ready" && next.scheduled_for && dateChanged) next.status = "scheduled";
+  return upsertIdea(ws, next);
 }
 
 export function addAsset(ws: string, input: Record<string, unknown>): string {
@@ -242,9 +258,21 @@ export function reorderColumn(ws: string, status: string, ids: string[]) {
   try {
     ids.forEach((ideaId, i) => {
       owned(ws, "ideas", ideaId);
+      const row = conn.prepare("SELECT status, scheduled_for FROM ideas WHERE id = ?").get(ideaId) as { status: string; scheduled_for: string | null };
+      if (status === "scheduled" && !row.scheduled_for) {
+        throw new IngestError("To schedule an idea, drag it from Ready onto a day in the calendar.");
+      }
+      if (status === "posted" && row.status !== "posted") {
+        throw new IngestError("Use Mark posted (with the post's URL) so it can be tracked.");
+      }
+      // Moving back to an earlier stage drops the publish date.
       conn
-        .prepare("UPDATE ideas SET status = ?, position = ?, updated_at = datetime('now') WHERE id = ? AND workspace_id = ?")
-        .run(status, i, ideaId, ws);
+        .prepare(
+          `UPDATE ideas SET status = ?, position = ?, updated_at = datetime('now'),
+             scheduled_for = CASE WHEN ? THEN NULL ELSE scheduled_for END
+           WHERE id = ? AND workspace_id = ?`,
+        )
+        .run(status, i, EARLY_STAGES.includes(status) ? 1 : 0, ideaId, ws);
     });
     conn.exec("COMMIT");
   } catch (err) {
@@ -260,6 +288,8 @@ export function scheduleIdea(ws: string, ideaId: string, when: string | null) {
     | { status: string }
     | undefined;
   if (!idea) throw new IngestError(`Idea "${ideaId}" not found`);
+  if (idea.status === "posted") throw new IngestError("It's already posted.");
+  if (idea.status !== "ready" && idea.status !== "scheduled") throw new IngestError(NOT_READY_TO_SCHEDULE);
   if (when && Number.isNaN(Date.parse(when))) throw new IngestError("Bad date");
   const status = when && idea.status === "ready" ? "scheduled" : !when && idea.status === "scheduled" ? "ready" : idea.status;
   run(
@@ -269,7 +299,7 @@ export function scheduleIdea(ws: string, ideaId: string, when: string | null) {
 }
 
 export function quickAddIdea(ws: string, title: string, status: string): string {
-  if (!IDEA_STATUSES.includes(status as IdeaStatus)) throw new IngestError("Bad status");
+  if (!IDEA_STATUSES.includes(status as IdeaStatus) || status === "scheduled" || status === "posted") throw new IngestError("Bad status");
   const top = db().prepare("SELECT MIN(position) AS p FROM ideas WHERE workspace_id = ? AND status = ?").get(ws, status) as { p: number | null };
   const ideaId = upsertIdea(ws, { title: required(title, "title"), status, created_by: "user" });
   run("UPDATE ideas SET position = ? WHERE id = ?", (top.p ?? 0) - 1, ideaId);

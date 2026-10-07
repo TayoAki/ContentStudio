@@ -229,6 +229,10 @@ function migrate(conn: DatabaseSync) {
     const exists = conn.prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`).get(column);
     if (!exists) conn.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
+  // Only Ready work can carry a publish date; clear dates left on earlier stages.
+  if (conn.prepare("SELECT 1 FROM pragma_table_info('ideas') WHERE name = 'scheduled_for'").get()) {
+    conn.exec("UPDATE ideas SET scheduled_for = NULL WHERE status IN ('idea', 'scripting', 'producing') AND scheduled_for IS NOT NULL");
+  }
 }
 
 const globalForDb = globalThis as unknown as { __csDb?: DatabaseSync };

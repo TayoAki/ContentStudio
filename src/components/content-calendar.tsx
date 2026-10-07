@@ -46,7 +46,8 @@ export function ContentCalendar({ ideas }: { ideas: BoardIdea[] }) {
     }
     return map;
   }, [items]);
-  const unscheduled = items.filter((i) => !i.scheduled_for && i.status !== "posted");
+  // Only finished work can be dated.
+  const unscheduled = items.filter((i) => !i.scheduled_for && i.status === "ready");
 
   const days = useMemo(() => {
     if (view === "week") return Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor), i));
@@ -168,7 +169,7 @@ export function ContentCalendar({ ideas }: { ideas: BoardIdea[] }) {
           </div>
         </div>
         <p className="mt-2 text-xs text-muted">
-          Drag ideas onto a day to schedule them; drag between days to reschedule. Scheduling a Ready idea moves it to Scheduled.
+          Only Ready ideas can be scheduled. Drag one onto a day to schedule it (it moves to Scheduled), or between days to reschedule.
         </p>
       </div>
 
@@ -180,10 +181,14 @@ export function ContentCalendar({ ideas }: { ideas: BoardIdea[] }) {
         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
           <Inbox size={14} /> Unscheduled <span className="ml-auto text-xs font-normal tabular-nums text-muted">{unscheduled.length}</span>
         </h3>
-        <p className="mb-2 text-xs text-muted">Drag onto the calendar. Drop here to unschedule.</p>
+        <p className="mb-2 text-xs text-muted">Ready ideas waiting for a date. Drag onto a day; drop back here to unschedule.</p>
         <div className="space-y-1.5">
           {unscheduled.map((i) => chip(i, true))}
-          {unscheduled.length === 0 && <p className="py-4 text-center text-xs text-muted">Everything in progress has a date.</p>}
+          {unscheduled.length === 0 && (
+            <p className="py-4 text-center text-xs text-muted">
+              Nothing is Ready. Finish an idea on the <Link href="/recreate" className="text-accent-ink underline">board</Link> and move it to Ready to schedule it.
+            </p>
+          )}
         </div>
       </aside>
     </div>
@@ -204,7 +209,7 @@ function CalendarItem({ idea, large, onDragStart, onDragEnd }: { idea: BoardIdea
   return (
     <Link
       href={`/recreate?tab=calendar&idea=${idea.id}`}
-      draggable={idea.status !== "posted"}
+      draggable={idea.status === "ready" || idea.status === "scheduled"}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/plain", idea.id);
@@ -212,7 +217,7 @@ function CalendarItem({ idea, large, onDragStart, onDragEnd }: { idea: BoardIdea
       }}
       onDragEnd={onDragEnd}
       title={idea.title}
-      className={`flex items-center ${idea.status === "posted" ? "" : "cursor-grab active:cursor-grabbing"} gap-1.5 rounded-md border px-1.5 py-1 text-[11px] leading-tight ${
+      className={`flex items-center ${idea.status === "ready" || idea.status === "scheduled" ? "cursor-grab active:cursor-grabbing" : ""} gap-1.5 rounded-md border px-1.5 py-1 text-[11px] leading-tight ${
         STATUS_STYLE[idea.status] ?? "border-line bg-surface"
       }`}
     >
@@ -220,6 +225,7 @@ function CalendarItem({ idea, large, onDragStart, onDragEnd }: { idea: BoardIdea
       <span className="min-w-0 flex-1">
         <span className={`block font-medium ${large ? "line-clamp-2" : "truncate"}`}>{idea.title}</span>
         <span className="block truncate text-muted">
+          {!idea.thumb && idea.status !== "posted" ? <span className="font-medium text-warn">Needs media · </span> : null}
           {idea.platform === "tiktok" ? "TikTok" : "Instagram"}
           {time && idea.status !== "posted" ? ` · ${time}` : ""}
           {idea.status === "posted" ? " · posted" : ""}
