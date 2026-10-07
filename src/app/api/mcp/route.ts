@@ -1,14 +1,15 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { checkApiKey } from "@/lib/auth";
+import { authenticateApiRequest } from "@/lib/auth";
 import { createMcpServer } from "@/lib/mcp/server";
 
 // Streamable HTTP MCP endpoint, stateless: a fresh server + transport per
 // request, so it works behind any load balancer without session affinity.
 async function handle(req: Request): Promise<Response> {
-  const denied = checkApiKey(req);
-  if (denied) return denied;
+  // The workspace API key decides which tenant's data the tools can see.
+  const auth = authenticateApiRequest(req);
+  if (auth instanceof Response) return auth;
 
-  const server = createMcpServer();
+  const server = createMcpServer(auth.workspaceId);
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

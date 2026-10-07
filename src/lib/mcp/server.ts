@@ -15,8 +15,11 @@ import {
   upsertIdea,
   upsertNiche,
   upsertTrendingPost,
+  usageToday,
+  type EventInput,
 } from "@/lib/ingest";
-import { fetchTikTokProfileVideos } from "@/lib/integrations/scrapecreators";
+import { searchReels, syncCreators } from "@/lib/discovery";
+import { SC_DAILY_LIMIT } from "@/lib/integrations/scrapecreators";
 import {
   IDEA_STATUSES,
   getFormat,
@@ -104,12 +107,12 @@ const ideaShape = {
   scheduled_for: z.string().optional().describe("ISO datetime; puts the idea on the content calendar"),
 };
 
-export function createMcpServer(): McpServer {
+export function createMcpServer(ws: string): McpServer {
   const server = new McpServer(
     { name: "contentstudio", version: "0.1.0" },
     {
       instructions: `ContentStudio finds replicable short-form formats, stores the content made from them, and tracks each post to revenue.
-Workflow: (1) Discover - add_trending_posts / sync_scrapecreators, then cluster posts into formats with save_format; breakout creators are young accounts with fast 30-day growth. (2) Recreate - get_format_brief, write scripts with save_ideas, attach generated media with add_assets, schedule via update_idea(scheduled_for). (3) Track - mark_posted, create_tracked_link (+ ManyChat keyword), record_metrics, then get_performance / get_format_performance to see which formats convert and feed that back into Discover.
+Workflow: (1) Discover - search_instagram_reels / sync_creators (Scrape Creators) or add_trending_posts (e.g. from Virlo), then cluster posts into formats with save_format; breakout creators are young accounts with fast 30-day growth. (2) Recreate - get_format_brief, write scripts with save_ideas, attach generated media with add_assets, schedule via update_idea(scheduled_for). (3) Track - mark_posted, create_tracked_link (+ ManyChat keyword), record_metrics, then get_performance / get_format_performance to see which formats convert and feed that back into Discover.
 Prefer educational, save-worthy formats. Always record what you produce in ContentStudio rather than only in chat.`,
     },
   );
@@ -119,7 +122,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
   server.registerTool(
     "list_niches",
     { title: "List niches", description: "Niches being researched, with their search keywords.", annotations: { readOnlyHint: true } },
-    handle(() => listNiches()),
+    handle(() => listNiches(ws)),
   );
 
   server.registerTool(
@@ -129,7 +132,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       description: "Add a niche to research (e.g. 'Men's fashion'). Returns its id.",
       inputSchema: { name: z.string(), keywords: z.string().optional().describe("Comma-separated search keywords"), id: z.string().optional() },
     },
-    handle((args) => ({ id: upsertNiche(args) })),
+    handle((args) => ({ id: upsertNiche(ws, args) })),
   );
 
   server.registerTool(
@@ -141,11 +144,11 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       annotations: { readOnlyHint: true },
     },
     handle(({ niche_id, limit = 10 }: { niche_id: string; limit?: number }) => ({
-      formats: listFormats(niche_id),
-      breakout_creators: listCreators(niche_id)
+      formats: listFormats(ws, niche_id),
+      breakout_creators: listCreators(ws, niche_id)
         .filter((c) => c.account_age_days < 180 && c.growth_30d > 0.5)
         .slice(0, limit),
-      top_posts: listTrendingPosts({ nicheId: niche_id }).slice(0, limit),
+      top_posts: listTrendingPosts(ws, { nicheId: niche_id }).slice(0, limit),
     })),
   );
 
@@ -163,7 +166,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       annotations: { readOnlyHint: true },
     },
     handle(({ niche_id, format_id, unclassified_only, limit = 25 }: { niche_id?: string; format_id?: string; unclassified_only?: boolean; limit?: number }) =>
-      listTrendingPosts({ nicheId: niche_id, formatId: format_id })
+      listTrendingPosts(ws, { nicheId: niche_id, formatId: format_id })
         .filter((p) => !unclassified_only || !p.format_id)
         .slice(0, limit),
     ),
@@ -176,7 +179,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       description: "Store trending videos found via Virlo, Scrape Creators or browsing. Upserts by URL (re-sending updates the stats).",
       inputSchema: { posts: z.array(z.object(trendingShape)).min(1) },
     },
-    handle(({ posts }: { posts: Record<string, unknown>[] }) => ({ ids: posts.map(upsertTrendingPost) })),
+    handle(({ posts }: { posts: Record<string, unknown>[] }) => ({ ids: posts.map((x) => upsertTrendingPost(ws, x)) })),
   );
 
   server.registerTool(
@@ -186,7 +189,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       description: "Upsert creator accounts (by platform + handle) so breakout accounts can be ranked.",
       inputSchema: { creators: z.array(z.object(creatorShape)).min(1) },
     },
-    handle(({ creators }: { creators: Record<string, unknown>[] }) => ({ ids: creators.map(upsertCreator) })),
+    handle(({ creators }: { creators: Record<string, unknown>[] }) => ({ ids: creators.map((x) => upsertCreator(ws, x)) })),
   );
 
   server.registerTool(
@@ -197,30 +200,41 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       inputSchema: { niche_id: z.string().optional() },
       annotations: { readOnlyHint: true },
     },
-    handle(({ niche_id }: { niche_id?: string }) => listCreators(niche_id)),
+    handle(({ niche_id }: { niche_id?: string }) => listCreators(ws, niche_id)),
   );
 
   server.registerTool(
-    "sync_scrapecreators",
+    "sync_creators",
     {
-      title: "Sync TikTok creators from Scrape Creators",
-      description: "Pull recent videos for TikTok handles via Scrape Creators and store them as trending posts. Requires SCRAPECREATORS_API_KEY on the server.",
-      inputSchema: { handles: z.array(z.string()).min(1), niche_id: z.string().optional() },
+      title: "Sync creators from Scrape Creators",
+      description: `Pull a creator's profile and recent posts (TikTok or Instagram) and store them as trending posts, so their outliers and growth show up in Discover. Metered: ${SC_DAILY_LIMIT} Scrape Creators requests per workspace per day (1 per handle).`,
+      inputSchema: { platform: PLATFORM, handles: z.array(z.string()).min(1).max(20), niche_id: z.string().optional() },
       annotations: { openWorldHint: true },
     },
-    handle(async ({ handles, niche_id }: { handles: string[]; niche_id?: string }) => {
-      const results: Record<string, number | string> = {};
-      for (const handle of handles) {
-        try {
-          const videos = await fetchTikTokProfileVideos(handle.replace(/^@/, ""));
-          videos.forEach((v) => upsertTrendingPost({ ...v, niche_id }));
-          results[handle] = videos.length;
-        } catch (err) {
-          results[handle] = err instanceof Error ? err.message : "failed";
-        }
-      }
-      return results;
-    }),
+    handle(({ platform, handles, niche_id }: { platform: "tiktok" | "instagram"; handles: string[]; niche_id?: string }) =>
+      syncCreators(ws, platform, handles, niche_id),
+    ),
+  );
+
+  server.registerTool(
+    "search_instagram_reels",
+    {
+      title: "Search Instagram Reels",
+      description: `Keyword search across Instagram Reels (e.g. "mens style tips"). Results are stored as trending posts and the creator handles are returned so you can sync_creators the promising ones for follower counts. Metered: 1 request.`,
+      inputSchema: { query: z.string().min(2), niche_id: z.string().optional() },
+      annotations: { openWorldHint: true },
+    },
+    handle(({ query, niche_id }: { query: string; niche_id?: string }) => searchReels(ws, query, niche_id)),
+  );
+
+  server.registerTool(
+    "get_usage",
+    {
+      title: "Scrape Creators usage",
+      description: "Scrape Creators requests used today by this workspace and the daily limit.",
+      annotations: { readOnlyHint: true },
+    },
+    handle(() => ({ used_today: usageToday(ws, "scrapecreators"), daily_limit: SC_DAILY_LIMIT })),
   );
 
   server.registerTool(
@@ -240,8 +254,8 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       },
     },
     handle((args: Record<string, unknown>) => {
-      const existing = typeof args.id === "string" ? getFormat(args.id) : undefined;
-      return { id: upsertFormat({ ...existing, ...Object.fromEntries(Object.entries(args).filter(([, v]) => v !== undefined)) }) };
+      const existing = typeof args.id === "string" ? getFormat(ws, args.id) : undefined;
+      return { id: upsertFormat(ws, { ...existing, ...Object.fromEntries(Object.entries(args).filter(([, v]) => v !== undefined)) }) };
     }),
   );
 
@@ -254,9 +268,9 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       annotations: { readOnlyHint: true },
     },
     handle(({ format_id }: { format_id: string }) => {
-      const format = getFormat(format_id);
+      const format = getFormat(ws, format_id);
       if (!format) throw new IngestError(`Format "${format_id}" not found`);
-      return { format, brief: claudeBrief(format, listTrendingPosts({ formatId: format_id }), appUrl()) };
+      return { format, brief: claudeBrief(format, listTrendingPosts(ws, { formatId: format_id }), appUrl()) };
     }),
   );
 
@@ -271,7 +285,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       annotations: { readOnlyHint: true },
     },
     handle(({ status, format_id }: { status?: string; format_id?: string }) =>
-      listIdeas().filter((i) => (!status || i.status === status) && (!format_id || i.format_id === format_id)),
+      listIdeas(ws).filter((i) => (!status || i.status === status) && (!format_id || i.format_id === format_id)),
     ),
   );
 
@@ -284,9 +298,9 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       annotations: { readOnlyHint: true },
     },
     handle(({ idea_id }: { idea_id: string }) => {
-      const idea = getIdea(idea_id);
+      const idea = getIdea(ws, idea_id);
       if (!idea) throw new IngestError(`Idea "${idea_id}" not found`);
-      return { ...idea, assets: listAssets(idea_id) };
+      return { ...idea, assets: listAssets(ws, idea_id) };
     }),
   );
 
@@ -298,7 +312,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       inputSchema: { ideas: z.array(z.object(ideaShape)).min(1) },
     },
     handle(({ ideas }: { ideas: Record<string, unknown>[] }) => ({
-      ids: ideas.map((i) => upsertIdea({ status: "scripting", ...i, created_by: "claude" })),
+      ids: ideas.map((i) => upsertIdea(ws, { status: "scripting", ...i, created_by: "claude" })),
     })),
   );
 
@@ -309,7 +323,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       description: "Change any fields on an idea: rewrite the script, move its status, or schedule it (scheduled_for). Only fields you pass change.",
       inputSchema: { idea_id: z.string(), ...Object.fromEntries(Object.entries(ideaShape).map(([k, v]) => [k, v.optional()])) },
     },
-    handle(({ idea_id, ...patch }: { idea_id: string } & Record<string, unknown>) => ({ id: updateIdea(idea_id, patch) })),
+    handle(({ idea_id, ...patch }: { idea_id: string } & Record<string, unknown>) => ({ id: updateIdea(ws, idea_id, patch) })),
   );
 
   server.registerTool(
@@ -330,7 +344,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
           .min(1),
       },
     },
-    handle(({ assets }: { assets: Record<string, unknown>[] }) => ({ ids: assets.map((a) => addAsset({ ...a, created_by: "claude" })) })),
+    handle(({ assets }: { assets: Record<string, unknown>[] }) => ({ ids: assets.map((a) => addAsset(ws, { ...a, created_by: "claude" })) })),
   );
 
   server.registerTool(
@@ -344,7 +358,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
     handle(({ from, to }: { from?: string; to?: string }) => {
       const start = from ? new Date(from) : new Date(new Date().toDateString());
       const end = to ? new Date(to) : new Date(start.getTime() + 30 * 86_400_000);
-      const ideas = listIdeas();
+      const ideas = listIdeas(ws);
       return {
         scheduled: ideas
           .filter((i) => i.scheduled_for && new Date(i.scheduled_for) >= start && new Date(i.scheduled_for) <= end)
@@ -371,9 +385,9 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       },
     },
     handle(({ idea_id, url, platform, published_at }: { idea_id: string; url?: string; platform?: string; published_at?: string }) => {
-      const idea = getIdea(idea_id);
+      const idea = getIdea(ws, idea_id);
       if (!idea) throw new IngestError(`Idea "${idea_id}" not found`);
-      return { post_id: recordPost({ idea_id, url, caption: idea.title, platform: platform ?? idea.platform, published_at }) };
+      return { post_id: recordPost(ws, { idea_id, url, caption: idea.title, platform: platform ?? idea.platform, published_at }) };
     }),
   );
 
@@ -401,7 +415,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       },
     },
     handle(({ metrics }: { metrics: Record<string, unknown>[] }) => {
-      metrics.forEach(recordMetrics);
+      metrics.forEach((x) => recordMetrics(ws, x));
       return { recorded: metrics.length };
     }),
   );
@@ -420,7 +434,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       },
     },
     handle((args: Record<string, unknown>) => {
-      const { slug, keyword } = createTrackedLink(args);
+      const { slug, keyword } = createTrackedLink(ws, args);
       return { url: `${appUrl()}/l/${slug}`, keyword };
     }),
   );
@@ -447,7 +461,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       },
     },
     handle(({ events }: { events: Record<string, unknown>[] }) => ({
-      ids: events.map((e) => recordEvent({ ...(e as Parameters<typeof recordEvent>[0]), source: "manual" })),
+      ids: events.map((e) => recordEvent(ws, { ...(e as unknown as EventInput), source: "manual" })),
     })),
   );
 
@@ -460,13 +474,13 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       annotations: { readOnlyHint: true },
     },
     handle(({ post_id }: { post_id?: string }) => {
-      const posts = listPostsWithFunnel();
+      const posts = listPostsWithFunnel(ws);
       if (post_id) {
         const post = posts.find((p) => p.id === post_id);
         if (!post) throw new IngestError(`Post "${post_id}" not found`);
-        return { ...post, series: getPostMetricsSeries(post_id) };
+        return { ...post, series: getPostMetricsSeries(ws, post_id) };
       }
-      return { totals: getTotals(), posts };
+      return { totals: getTotals(ws), posts };
     }),
   );
 
@@ -477,7 +491,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       description: "Views, saves, follows, clicks, purchases and revenue rolled up per format, sorted by revenue. Use this to decide which formats to make more of.",
       annotations: { readOnlyHint: true },
     },
-    handle(() => listFormatPerformance()),
+    handle(() => listFormatPerformance(ws)),
   );
 
   server.registerTool(
@@ -487,7 +501,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       description: "All tracked links with clicks/sales/revenue, ManyChat keywords with comment counts, and the latest funnel events.",
       annotations: { readOnlyHint: true },
     },
-    handle(() => ({ links: listLinks(), keywords: listKeywords(), recent_events: listRecentEvents(25) })),
+    handle(() => ({ links: listLinks(ws), keywords: listKeywords(ws), recent_events: listRecentEvents(ws, 25) })),
   );
 
   // ---------------- Prompts (slash commands in Claude Code) ----------------
@@ -507,7 +521,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
             type: "text",
             text: `Run the ContentStudio loop for the "${niche}" niche:
 1. list_niches; create it with save_niche if missing.
-2. Find what's trending: use the Virlo tools if available, otherwise sync_scrapecreators for fast-growing accounts in the niche. Store everything with add_trending_posts (include creator follower counts and 30-day growth).
+2. Find what's trending: search_instagram_reels with the niche keywords, then sync_creators for the most promising handles (TikTok and Instagram); use the Virlo tools too if available. Store everything with add_trending_posts (include creator follower counts and 30-day growth).
 3. Look for accounts that are new and grew fast, and for educational, save-worthy posts. Cluster the outliers into replicable formats with save_format (structure as timed beats, why_it_works, example_urls).
 4. Check get_format_performance so formats that already converted for us get priority.
 5. Pick the strongest format, call get_format_brief, and write ${count ?? "5"} scripts with save_ideas.

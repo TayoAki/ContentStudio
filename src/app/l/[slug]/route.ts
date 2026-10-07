@@ -5,14 +5,14 @@ import { recordEvent } from "@/lib/ingest";
 // checkout (Stripe client_reference_id / metadata.cs_cid) carries back to us.
 export async function GET(req: Request, ctx: RouteContext<"/l/[slug]">) {
   const { slug } = await ctx.params;
-  const link = db().prepare("SELECT destination, post_id FROM links WHERE slug = ?").get(slug) as
-    | { destination: string; post_id: string | null }
+  const link = db().prepare("SELECT workspace_id, destination, post_id FROM links WHERE slug = ?").get(slug) as
+    | { workspace_id: string; destination: string; post_id: string | null }
     | undefined;
   if (!link) return new Response("Link not found", { status: 404 });
 
   const incoming = new URL(req.url);
   const clickId = id("clk");
-  recordEvent({
+  recordEvent(link.workspace_id, {
     type: "link_click",
     source: "link",
     link_slug: slug,

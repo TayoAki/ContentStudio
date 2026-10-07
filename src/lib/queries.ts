@@ -118,11 +118,11 @@ const one = <T>(sql: string, ...args: (string | number | null)[]) =>
 
 // ---------- Discover ----------
 
-export function listNiches(): Niche[] {
-  return all<Niche>("SELECT id, name, keywords FROM niches ORDER BY name");
+export function listNiches(ws: string): Niche[] {
+  return all<Niche>("SELECT id, name, keywords FROM niches WHERE workspace_id = ? ORDER BY name", ws);
 }
 
-export function listFormats(nicheId?: string): Format[] {
+export function listFormats(ws: string, nicheId?: string): Format[] {
   const rows = all<Omit<Format, "structure"> & { structure: string }>(
     `SELECT f.*,
        (SELECT COUNT(*) FROM trending_posts t WHERE t.format_id = f.id) AS examples,
@@ -130,18 +130,19 @@ export function listFormats(nicheId?: string): Format[] {
        (SELECT COALESCE(SUM(saves) * 1.0 / NULLIF(SUM(views), 0), 0) FROM trending_posts t WHERE t.format_id = f.id) AS avg_save_rate,
        (SELECT COUNT(*) FROM ideas i WHERE i.format_id = f.id) AS ideas
      FROM formats f
-     WHERE (?1 IS NULL OR f.niche_id = ?1)
+     WHERE f.workspace_id = ?2 AND (?1 IS NULL OR f.niche_id = ?1)
      ORDER BY CASE f.status WHEN 'winner' THEN 0 WHEN 'testing' THEN 1 WHEN 'watching' THEN 2 ELSE 3 END, total_views DESC`,
     nicheId ?? null,
+    ws,
   );
   return rows.map((r) => ({ ...r, structure: JSON.parse(r.structure) as string[] }));
 }
 
-export function getFormat(formatId: string): Format | undefined {
-  return listFormats().find((f) => f.id === formatId);
+export function getFormat(ws: string, formatId: string): Format | undefined {
+  return listFormats(ws).find((f) => f.id === formatId);
 }
 
-export function listTrendingPosts(opts: { nicheId?: string; formatId?: string } = {}): TrendingPost[] {
+export function listTrendingPosts(ws: string, opts: { nicheId?: string; formatId?: string } = {}): TrendingPost[] {
   return all<TrendingPost>(
     `SELECT t.*, f.name AS format_name, c.handle, c.followers,
        COALESCE(t.saves * 1.0 / NULLIF(t.views, 0), 0) AS save_rate,
@@ -149,15 +150,16 @@ export function listTrendingPosts(opts: { nicheId?: string; formatId?: string } 
      FROM trending_posts t
      LEFT JOIN creators c ON c.id = t.creator_id
      LEFT JOIN formats f ON f.id = t.format_id
-     WHERE (?1 IS NULL OR t.niche_id = ?1) AND (?2 IS NULL OR t.format_id = ?2)
+     WHERE t.workspace_id = ?3 AND (?1 IS NULL OR t.niche_id = ?1) AND (?2 IS NULL OR t.format_id = ?2)
      ORDER BY reach_multiple DESC`,
     opts.nicheId ?? null,
     opts.formatId ?? null,
+    ws,
   );
 }
 
 // Breakout = account is young and grew fast in the last 30 days.
-export function listCreators(nicheId?: string): Creator[] {
+export function listCreators(ws: string, nicheId?: string): Creator[] {
   return all<Creator>(
     `SELECT c.id, c.platform, c.handle, COALESCE(c.display_name, c.handle) AS display_name, c.followers, c.followers_30d_ago,
        COALESCE((c.followers - c.followers_30d_ago) * 1.0 / NULLIF(c.followers_30d_ago, 0), 0) AS growth_30d,
@@ -166,31 +168,35 @@ export function listCreators(nicheId?: string): Creator[] {
        (SELECT f.name FROM trending_posts t JOIN formats f ON f.id = t.format_id
          WHERE t.creator_id = c.id GROUP BY f.id ORDER BY SUM(t.views) DESC LIMIT 1) AS top_format
      FROM creators c
-     WHERE (?1 IS NULL OR c.niche_id = ?1)
+     WHERE c.workspace_id = ?2 AND (?1 IS NULL OR c.niche_id = ?1)
      ORDER BY growth_30d DESC`,
     nicheId ?? null,
+    ws,
   );
 }
 
 // ---------- Recreate ----------
 
-export function listIdeas(): Idea[] {
+export function listIdeas(ws: string): Idea[] {
   return all<Idea>(
     `SELECT i.*, f.name AS format_name, (SELECT COUNT(*) FROM assets a WHERE a.idea_id = i.id) AS assets
      FROM ideas i LEFT JOIN formats f ON f.id = i.format_id
+     WHERE i.workspace_id = ?
      ORDER BY COALESCE(i.scheduled_for, i.created_at) ASC`,
+    ws,
   );
 }
 
-export function getIdea(ideaId: string): Idea | undefined {
-  return listIdeas().find((i) => i.id === ideaId);
+export function getIdea(ws: string, ideaId: string): Idea | undefined {
+  return listIdeas(ws).find((i) => i.id === ideaId);
 }
 
-export function listAssets(ideaId?: string): Asset[] {
+export function listAssets(ws: string, ideaId?: string): Asset[] {
   return all<Asset>(
     `SELECT a.*, i.title AS idea_title FROM assets a LEFT JOIN ideas i ON i.id = a.idea_id
-     WHERE (?1 IS NULL OR a.idea_id = ?1) ORDER BY a.created_at DESC`,
+     WHERE a.workspace_id = ?2 AND (?1 IS NULL OR a.idea_id = ?1) ORDER BY a.created_at DESC`,
     ideaId ?? null,
+    ws,
   );
 }
 
@@ -207,7 +213,7 @@ const FUNNEL_SELECT = `
   (SELECT COUNT(*) FROM events e WHERE e.post_id = p.id AND e.type = 'purchase') AS purchases,
   (SELECT COALESCE(SUM(value_cents), 0) FROM events e WHERE e.post_id = p.id AND e.type = 'purchase') AS revenue_cents`;
 
-export function listPostsWithFunnel(): PostWithFunnel[] {
+export function listPostsWithFunnel(ws: string): PostWithFunnel[] {
   return all<PostWithFunnel>(
     `SELECT p.*, f.name AS format_name,
        (SELECT keyword FROM keywords k WHERE k.post_id = p.id LIMIT 1) AS keyword,
@@ -218,22 +224,27 @@ export function listPostsWithFunnel(): PostWithFunnel[] {
      LEFT JOIN formats f ON f.id = i.format_id
      LEFT JOIN post_metrics m ON m.post_id = p.id
        AND m.captured_at = (SELECT MAX(captured_at) FROM post_metrics WHERE post_id = p.id)
+     WHERE p.workspace_id = ?
      ORDER BY p.published_at DESC`,
+    ws,
   );
 }
 
-export function getPostMetricsSeries(postId: string) {
+export function getPostMetricsSeries(ws: string, postId: string) {
   return all<{ captured_at: string; views: number; follows: number }>(
-    "SELECT captured_at, views, follows FROM post_metrics WHERE post_id = ? ORDER BY captured_at",
+    `SELECT m.captured_at, m.views, m.follows FROM post_metrics m JOIN posts p ON p.id = m.post_id
+     WHERE m.post_id = ? AND p.workspace_id = ? ORDER BY m.captured_at`,
     postId,
+    ws,
   );
 }
 
-export function getTotals(): Funnel {
-  const posts = listPostsWithFunnel();
+export function getTotals(ws: string): Funnel {
+  const posts = listPostsWithFunnel(ws);
   const sum = (k: keyof Funnel) => posts.reduce((acc, p) => acc + p[k], 0);
   const bio = one<{ clicks: number }>(
-    "SELECT COUNT(*) AS clicks FROM events WHERE post_id IS NULL AND type = 'link_click'",
+    "SELECT COUNT(*) AS clicks FROM events WHERE workspace_id = ? AND post_id IS NULL AND type = 'link_click'",
+    ws,
   );
   return {
     views: sum("views"),
@@ -263,37 +274,41 @@ export type LinkRow = {
   revenue_cents: number;
 };
 
-export function listLinks(): LinkRow[] {
+export function listLinks(ws: string): LinkRow[] {
   return all<LinkRow>(
     `SELECT l.*, p.caption AS post_caption,
        (SELECT COUNT(*) FROM events e WHERE e.link_slug = l.slug AND e.type = 'link_click') AS clicks,
        (SELECT COUNT(*) FROM events e WHERE e.link_slug = l.slug AND e.type = 'purchase') AS purchases,
        (SELECT COALESCE(SUM(value_cents), 0) FROM events e WHERE e.link_slug = l.slug AND e.type = 'purchase') AS revenue_cents
-     FROM links l LEFT JOIN posts p ON p.id = l.post_id ORDER BY clicks DESC`,
+     FROM links l LEFT JOIN posts p ON p.id = l.post_id WHERE l.workspace_id = ? ORDER BY clicks DESC`,
+    ws,
   );
 }
 
 export type KeywordRow = { keyword: string; post_id: string | null; link_slug: string | null; post_caption: string | null; hits: number };
 
-export function listKeywords(): KeywordRow[] {
+export function listKeywords(ws: string): KeywordRow[] {
   return all<KeywordRow>(
     `SELECT k.*, p.caption AS post_caption,
-       (SELECT COUNT(*) FROM events e WHERE e.keyword = k.keyword AND e.type = 'comment_keyword') AS hits
-     FROM keywords k LEFT JOIN posts p ON p.id = k.post_id ORDER BY hits DESC`,
+       (SELECT COUNT(*) FROM events e WHERE e.workspace_id = k.workspace_id AND e.keyword = k.keyword AND e.type = 'comment_keyword') AS hits
+     FROM keywords k LEFT JOIN posts p ON p.id = k.post_id WHERE k.workspace_id = ? ORDER BY hits DESC`,
+    ws,
   );
 }
 
-export function listRecentEvents(limit = 12) {
+export function listRecentEvents(ws: string, limit = 12) {
   return all<{ id: string; type: string; source: string; value_cents: number; created_at: string; post_caption: string | null; keyword: string | null; link_slug: string | null }>(
     `SELECT e.id, e.type, e.source, e.value_cents, e.created_at, e.keyword, e.link_slug, p.caption AS post_caption
-     FROM events e LEFT JOIN posts p ON p.id = e.post_id ORDER BY e.created_at DESC LIMIT ?`,
+     FROM events e LEFT JOIN posts p ON p.id = e.post_id WHERE e.workspace_id = ? ORDER BY e.created_at DESC LIMIT ?`,
+    ws,
     limit,
   );
 }
 
-export function getSyncStatus() {
+export function getSyncStatus(ws: string) {
   return all<{ source: string; last: string; n: number }>(
-    "SELECT source, MAX(fetched_at) AS last, COUNT(*) AS n FROM trending_posts GROUP BY source",
+    "SELECT source, MAX(fetched_at) AS last, COUNT(*) AS n FROM trending_posts WHERE workspace_id = ? GROUP BY source",
+    ws,
   );
 }
 
@@ -310,12 +325,12 @@ export type FormatPerformance = {
   revenue_cents: number;
 };
 
-export function listFormatPerformance(): FormatPerformance[] {
+export function listFormatPerformance(ws: string): FormatPerformance[] {
   const byFormat = new Map<string, FormatPerformance>();
   const formatIds = new Map(
-    all<{ id: string; format_id: string | null }>("SELECT id, format_id FROM ideas").map((i) => [i.id, i.format_id]),
+    all<{ id: string; format_id: string | null }>("SELECT id, format_id FROM ideas WHERE workspace_id = ?", ws).map((i) => [i.id, i.format_id]),
   );
-  for (const p of listPostsWithFunnel()) {
+  for (const p of listPostsWithFunnel(ws)) {
     const formatId = p.idea_id ? formatIds.get(p.idea_id) ?? null : null;
     const key = formatId ?? "none";
     const row = byFormat.get(key) ?? {

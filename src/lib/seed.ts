@@ -1,7 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
+import { randomBytes, scryptSync } from "node:crypto";
 
-// Demo data for the fashion niche so the app is explorable before any
-// integration is connected. Disable with SEED_DEMO_DATA=false.
+// Demo login + workspace with a seeded men's-fashion niche so the app is
+// explorable locally. On by default outside production; SEED_DEMO_DATA overrides.
+export const DEMO_EMAIL = "demo@contentstudio.dev";
+export const DEMO_PASSWORD = "demo-password";
+const WS = "ws_demo";
 
 const DAY = 86_400_000;
 const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
@@ -23,8 +27,13 @@ export function seed(conn: DatabaseSync) {
 
   conn.exec("BEGIN");
   try {
+    const salt = randomBytes(16);
+    const hash = `scrypt$${salt.toString("hex")}$${scryptSync(DEMO_PASSWORD, salt, 64).toString("hex")}`;
+    run("INSERT INTO users (id, email, name, password_hash) VALUES ('usr_demo', ?, 'Demo', ?)", DEMO_EMAIL, hash);
+    run("INSERT INTO workspaces (id, name, manychat_secret) VALUES (?, 'Demo studio', ?)", WS, randomBytes(18).toString("base64url"));
+    run("INSERT INTO memberships (user_id, workspace_id) VALUES ('usr_demo', ?)", WS);
     run(
-      "INSERT INTO niches (id, name, keywords) VALUES (?, ?, ?), (?, ?, ?)",
+      `INSERT INTO niches (workspace_id, id, name, keywords) VALUES ('${WS}', ?, ?, ?), ('${WS}', ?, ?, ?)`,
       "fashion", "Men's fashion", "mens style, outfit ideas, style tips, capsule wardrobe",
       "fitness", "Fitness", "workout, form tips, hypertrophy, mobility",
     );
@@ -67,7 +76,7 @@ export function seed(conn: DatabaseSync) {
     ];
     for (const [fid, niche, name, summary, structure, why, status] of formats) {
       run(
-        "INSERT INTO formats (id, niche_id, name, summary, structure, why_it_works, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        `INSERT INTO formats (workspace_id, id, niche_id, name, summary, structure, why_it_works, status) VALUES ('${WS}', ?, ?, ?, ?, ?, ?, ?)`,
         fid, niche, name, summary, JSON.stringify(structure), why, status,
       );
     }
@@ -82,8 +91,8 @@ export function seed(conn: DatabaseSync) {
     ];
     for (const [cid, platform, handle, name, followers, prev, ageDays] of creators) {
       run(
-        `INSERT INTO creators (id, platform, handle, display_name, niche_id, followers, followers_30d_ago, first_post_at, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO creators (workspace_id, id, platform, handle, display_name, niche_id, followers, followers_30d_ago, first_post_at, source)
+         VALUES ('${WS}', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         cid, platform, handle, name, cid === "cr_6" ? "fitness" : "fashion", followers, prev, iso(ageDays * DAY),
         platform === "tiktok" ? "virlo" : "scrapecreators",
       );
@@ -102,9 +111,9 @@ export function seed(conn: DatabaseSync) {
       const saveRate = fid === "fmt_two_ways" || fid === "fmt_formula" ? 0.06 + rand() * 0.04 : 0.015 + rand() * 0.02;
       const platform = (creators.find((c) => c[0] === cid) ?? creators[0])[1];
       run(
-        `INSERT INTO trending_posts (id, platform, url, creator_id, niche_id, format_id, caption, hook, thumbnail_url,
+        `INSERT INTO trending_posts (workspace_id, id, platform, url, creator_id, niche_id, format_id, caption, hook, thumbnail_url,
            views, likes, comments, shares, saves, posted_at, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES ('${WS}', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         `tp_${i + 1}`, platform, `https://example.com/${platform}/post/${i + 1}`, cid,
         fid === "fmt_form_fix" ? "fitness" : "fashion", fid, caption, hook, thumb,
         views, Math.round(views * (0.05 + rand() * 0.04)), Math.round(views * (0.002 + rand() * 0.006)),
@@ -124,8 +133,8 @@ export function seed(conn: DatabaseSync) {
     ];
     for (const [iid, fid, title, hook, status, platform, dayOffset, by] of ideas) {
       run(
-        `INSERT INTO ideas (id, format_id, title, hook, script, status, platform, scheduled_for, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ideas (workspace_id, id, format_id, title, hook, script, status, platform, scheduled_for, created_by)
+         VALUES ('${WS}', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         iid, fid, title, hook,
         hook ? `HOOK: ${hook}\nBEAT 1: show look one, call out the hero piece\nBEAT 2: show look two, contrast colour\nRULE: one structured piece + one relaxed piece\nCTA: save this` : "",
         status, platform,
@@ -134,7 +143,7 @@ export function seed(conn: DatabaseSync) {
       );
     }
     run(
-      "INSERT INTO assets (id, idea_id, kind, url, label, created_by) VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)",
+      `INSERT INTO assets (workspace_id, id, idea_id, kind, url, label, created_by) VALUES ('${WS}', ?, ?, ?, ?, ?, ?), ('${WS}', ?, ?, ?, ?, ?, ?)`,
       "as_1", "idea_1", "image", "/samples/blazer-two-ways.webp", "Cover frame", "claude",
       "as_2", "idea_5", "image", "/samples/blazer-two-ways.webp", "Reference look", "user",
     );
@@ -148,7 +157,7 @@ export function seed(conn: DatabaseSync) {
     for (const [pid, iid, platform, daysAgo, views, keyword] of posts) {
       const title = ideas.find((i) => i[0] === iid)![2];
       run(
-        "INSERT INTO posts (id, idea_id, platform, url, caption, thumbnail_url, published_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        `INSERT INTO posts (workspace_id, id, idea_id, platform, url, caption, thumbnail_url, published_at) VALUES ('${WS}', ?, ?, ?, ?, ?, ?, ?)`,
         pid, iid, platform, `https://example.com/${platform}/me/${pid}`, title,
         pid === "post_1" ? "/samples/blazer-two-ways.webp" : null, iso(daysAgo * DAY),
       );
@@ -163,12 +172,12 @@ export function seed(conn: DatabaseSync) {
           Math.round(v * 0.08), Math.round(v * 0.03), Math.round(v * 0.006),
         );
       }
-      const slug = `${pid.replace("post_", "p")}`;
+      const slug = `demo-${pid.replace("post_", "p")}`;
       run(
-        "INSERT INTO links (slug, destination, label, post_id) VALUES (?, ?, ?, ?)",
+        `INSERT INTO links (workspace_id, slug, destination, label, post_id) VALUES ('${WS}', ?, ?, ?, ?)`,
         slug, "https://example.com/blazer-guide", `${title} — DM link`, pid,
       );
-      if (keyword) run("INSERT INTO keywords (keyword, post_id, link_slug) VALUES (?, ?, ?)", keyword, pid, slug);
+      if (keyword) run(`INSERT INTO keywords (workspace_id, keyword, post_id, link_slug) VALUES ('${WS}', ?, ?, ?)`, keyword, pid, slug);
 
       // Funnel events: comments(keyword) -> DMs -> clicks -> opt-ins -> purchases.
       const kwComments = keyword ? Math.round(views * 0.0011) : 0;
@@ -178,8 +187,8 @@ export function seed(conn: DatabaseSync) {
       let n = 0;
       const ev = (type: string, value = 0, source = "manychat", clickId: string | null = null) =>
         run(
-          `INSERT INTO events (id, type, post_id, link_slug, keyword, click_id, value_cents, source, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO events (workspace_id, id, type, post_id, link_slug, keyword, click_id, value_cents, source, created_at)
+           VALUES ('${WS}', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           `ev_${pid}_${n++}`, type, pid, slug, keyword, clickId, value, source,
           iso(Math.max(0, daysAgo - rand() * daysAgo) * DAY),
         );
@@ -190,12 +199,12 @@ export function seed(conn: DatabaseSync) {
       for (let i = 0; i < purchases; i++) ev("purchase", 2900, "stripe", `clk_${pid}_${i}`);
     }
     run(
-      "INSERT INTO links (slug, destination, label, post_id) VALUES (?, ?, ?, NULL)",
-      "bio", "https://example.com/shop", "Link in bio",
+      `INSERT INTO links (workspace_id, slug, destination, label, post_id) VALUES ('${WS}', ?, ?, ?, NULL)`,
+      "demo-bio", "https://example.com/shop", "Link in bio",
     );
     for (let i = 0; i < 140; i++) {
       run(
-        "INSERT INTO events (id, type, post_id, link_slug, value_cents, source, created_at) VALUES (?, 'link_click', NULL, 'bio', 0, 'link', ?)",
+        `INSERT INTO events (workspace_id, id, type, post_id, link_slug, value_cents, source, created_at) VALUES ('${WS}', ?, 'link_click', NULL, 'demo-bio', 0, 'link', ?)`,
         `ev_bio_${i}`, iso(rand() * 10 * DAY),
       );
     }

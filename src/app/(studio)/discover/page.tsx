@@ -2,9 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Flame, Rocket, Sparkles } from "lucide-react";
-import { createIdeaFromFormat, setFormatStatus } from "@/app/actions";
+import { createIdeaFromFormat, createNiche, runCreatorSync, runReelSearch, setFormatStatus } from "@/app/actions";
+import { Flash } from "@/components/flash";
 import { CopyButton } from "@/components/copy-button";
 import { Badge, Card, SectionTitle, SidebarLink, SidebarSection, Workspace } from "@/components/workspace";
+import { requireSession } from "@/lib/auth";
 import { claudeBrief } from "@/lib/brief";
 import { compact, pct, shortDate } from "@/lib/format";
 import { listCreators, listFormats, listNiches, listTrendingPosts, type Format } from "@/lib/queries";
@@ -14,13 +16,14 @@ type TabKey = (typeof TABS)[number];
 
 export default async function DiscoverPage({ searchParams }: PageProps<"/discover">) {
   await connection();
+  const { workspaceId: ws } = await requireSession();
   const sp = await searchParams;
-  const niches = listNiches();
-  const nicheId = typeof sp.niche === "string" ? sp.niche : (niches.find((n) => n.id === "fashion") ?? niches[0])?.id;
+  const niches = listNiches(ws);
+  const nicheId = typeof sp.niche === "string" && niches.some((n) => n.id === sp.niche) ? sp.niche : niches[0]?.id;
   const tab: TabKey = TABS.includes(sp.tab as TabKey) ? (sp.tab as TabKey) : "formats";
-  const formats = listFormats(nicheId);
+  const formats = listFormats(ws, nicheId);
   const selected = formats.find((f) => f.id === sp.format) ?? formats[0];
-  const posts = listTrendingPosts({ nicheId });
+  const posts = listTrendingPosts(ws, { nicheId });
   const href = (q: Record<string, string | undefined>) =>
     `/discover?${new URLSearchParams(Object.entries({ niche: nicheId, tab, format: selected?.id, ...q }).filter((e): e is [string, string] => !!e[1]))}`;
 
@@ -49,14 +52,48 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
               </SidebarLink>
             ))}
           </SidebarSection>
-          <SidebarSection title="Keywords tracked">
-            <p className="text-xs leading-relaxed text-muted">{niches.find((n) => n.id === nicheId)?.keywords}</p>
+          {nicheId && (
+            <SidebarSection title="Find content (Scrape Creators)">
+              <form action={runReelSearch} className="space-y-2">
+                <input type="hidden" name="niche_id" value={nicheId} />
+                <input
+                  name="query"
+                  required
+                  minLength={2}
+                  defaultValue={niches.find((n) => n.id === nicheId)?.keywords.split(",")[0]?.trim()}
+                  placeholder="Search Reels, e.g. mens style tips"
+                  className={input}
+                />
+                <button className={button}>Search Instagram Reels</button>
+              </form>
+              <form action={runCreatorSync} className="mt-3 space-y-2">
+                <input type="hidden" name="niche_id" value={nicheId} />
+                <textarea name="handles" rows={2} placeholder="@handle1, @handle2" className={input} />
+                <div className="flex gap-2">
+                  <select name="platform" className={`${input} w-auto`}>
+                    <option value="instagram">Instagram</option>
+                    <option value="tiktok">TikTok</option>
+                  </select>
+                  <button className={`${button} flex-1`}>Sync creators</button>
+                </div>
+              </form>
+              <p className="mt-2 text-[11px] text-muted">Each search or handle uses 1 request of your daily allowance.</p>
+            </SidebarSection>
+          )}
+          <SidebarSection title="New niche">
+            <form action={createNiche} className="space-y-2">
+              <input name="name" required placeholder="e.g. Men's fashion" className={input} />
+              <input name="keywords" placeholder="keywords, comma separated" className={input} />
+              <button className={button}>Add niche</button>
+            </form>
           </SidebarSection>
         </>
       }
-      right={selected ? <FormatPanel format={selected} /> : <p className="text-sm text-muted">No formats yet.</p>}
+      right={selected ? <FormatPanel ws={ws} format={selected} /> : <p className="text-sm text-muted">No formats yet.</p>}
     >
-      {tab === "formats" && (
+      <Flash />
+      {niches.length === 0 && <Welcome />}
+      {tab === "formats" && nicheId && (
         <>
           <SectionTitle
             title="Replicable formats"
@@ -70,7 +107,7 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
                   <Card className={`overflow-hidden transition-shadow hover:shadow-md ${f.id === selected?.id ? "ring-2 ring-accent" : ""}`}>
                     <div className="relative grid h-36 place-items-center bg-zinc-100">
                       {cover ? (
-                        <Image src={cover} alt="" fill className="object-cover object-top" sizes="400px" />
+                        <Image src={cover} alt="" fill unoptimized={!cover.startsWith("/")} className="object-cover object-top" sizes="400px" />
                       ) : (
                         <Sparkles className="text-zinc-300" size={32} />
                       )}
@@ -95,7 +132,13 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
         </>
       )}
 
-      {tab === "creators" && <CreatorsTable nicheId={nicheId} />}
+      {tab === "formats" && nicheId && formats.length === 0 && (
+        <Card className="p-6 text-sm text-muted">
+          No formats yet. Search Reels or sync creators (left), then ask Claude to cluster the outliers into formats with the{" "}
+          <code>save_format</code> tool, or run <code>/mcp__contentstudio__find_and_recreate</code> in Claude Code.
+        </Card>
+      )}
+      {tab === "creators" && <CreatorsTable ws={ws} nicheId={nicheId} />}
 
       {tab === "posts" && (
         <>
@@ -128,8 +171,27 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
   );
 }
 
-function CreatorsTable({ nicheId }: { nicheId?: string }) {
-  const creators = listCreators(nicheId);
+const input = "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm";
+const button = "w-full rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90";
+
+function Welcome() {
+  return (
+    <Card className="mb-6 p-6">
+      <h2 className="text-lg font-semibold">Welcome to ContentStudio</h2>
+      <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-muted">
+        <li>Add your niche (left sidebar) with a few search keywords.</li>
+        <li>Search Instagram Reels or sync creators you admire to pull in what&apos;s working.</li>
+        <li>
+          Connect Claude Code from <Link href="/settings" className="text-accent underline">Settings</Link> and run{" "}
+          <code>/mcp__contentstudio__find_and_recreate</code> to cluster formats and write scripts for you.
+        </li>
+      </ol>
+    </Card>
+  );
+}
+
+function CreatorsTable({ ws, nicheId }: { ws: string; nicheId?: string }) {
+  const creators = listCreators(ws, nicheId);
   return (
     <>
       <SectionTitle
@@ -177,8 +239,8 @@ function CreatorsTable({ nicheId }: { nicheId?: string }) {
   );
 }
 
-function FormatPanel({ format }: { format: Format }) {
-  const examples = listTrendingPosts({ formatId: format.id });
+function FormatPanel({ ws, format }: { ws: string; format: Format }) {
+  const examples = listTrendingPosts(ws, { formatId: format.id });
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   return (
     <div className="space-y-5">
