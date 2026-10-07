@@ -1,0 +1,298 @@
+import "server-only";
+import { db } from "./db";
+
+export type Niche = { id: string; name: string; keywords: string };
+
+export type Format = {
+  id: string;
+  niche_id: string;
+  name: string;
+  summary: string;
+  structure: string[];
+  why_it_works: string;
+  status: "watching" | "testing" | "winner" | "retired";
+  examples: number;
+  total_views: number;
+  avg_save_rate: number;
+  ideas: number;
+};
+
+export type TrendingPost = {
+  id: string;
+  platform: string;
+  url: string;
+  hook: string;
+  caption: string;
+  transcript: string;
+  thumbnail_url: string | null;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  posted_at: string;
+  source: string;
+  format_id: string | null;
+  format_name: string | null;
+  handle: string;
+  followers: number;
+  save_rate: number;
+  reach_multiple: number;
+};
+
+export type Creator = {
+  id: string;
+  platform: string;
+  handle: string;
+  display_name: string;
+  followers: number;
+  followers_30d_ago: number;
+  growth_30d: number;
+  account_age_days: number;
+  source: string;
+  top_format: string | null;
+};
+
+export type Idea = {
+  id: string;
+  format_id: string | null;
+  format_name: string | null;
+  title: string;
+  hook: string;
+  script: string;
+  notes: string;
+  status: IdeaStatus;
+  platform: string;
+  scheduled_for: string | null;
+  created_by: string;
+  assets: number;
+};
+
+export const IDEA_STATUSES = ["idea", "scripting", "producing", "ready", "scheduled", "posted"] as const;
+export type IdeaStatus = (typeof IDEA_STATUSES)[number];
+
+export type Asset = {
+  id: string;
+  idea_id: string | null;
+  idea_title: string | null;
+  kind: string;
+  url: string;
+  label: string;
+  created_by: string;
+  created_at: string;
+};
+
+export type Funnel = {
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  profile_visits: number;
+  follows: number;
+  keyword_comments: number;
+  dms: number;
+  clicks: number;
+  optins: number;
+  purchases: number;
+  revenue_cents: number;
+};
+
+export type PostWithFunnel = Funnel & {
+  id: string;
+  idea_id: string | null;
+  platform: string;
+  url: string;
+  caption: string;
+  thumbnail_url: string | null;
+  published_at: string;
+  format_name: string | null;
+  keyword: string | null;
+  link_slug: string | null;
+};
+
+const all = <T>(sql: string, ...args: (string | number | null)[]) =>
+  db().prepare(sql).all(...args) as T[];
+const one = <T>(sql: string, ...args: (string | number | null)[]) =>
+  db().prepare(sql).get(...args) as T | undefined;
+
+// ---------- Discover ----------
+
+export function listNiches(): Niche[] {
+  return all<Niche>("SELECT id, name, keywords FROM niches ORDER BY name");
+}
+
+export function listFormats(nicheId?: string): Format[] {
+  const rows = all<Omit<Format, "structure"> & { structure: string }>(
+    `SELECT f.*,
+       (SELECT COUNT(*) FROM trending_posts t WHERE t.format_id = f.id) AS examples,
+       (SELECT COALESCE(SUM(views), 0) FROM trending_posts t WHERE t.format_id = f.id) AS total_views,
+       (SELECT COALESCE(SUM(saves) * 1.0 / NULLIF(SUM(views), 0), 0) FROM trending_posts t WHERE t.format_id = f.id) AS avg_save_rate,
+       (SELECT COUNT(*) FROM ideas i WHERE i.format_id = f.id) AS ideas
+     FROM formats f
+     WHERE (?1 IS NULL OR f.niche_id = ?1)
+     ORDER BY CASE f.status WHEN 'winner' THEN 0 WHEN 'testing' THEN 1 WHEN 'watching' THEN 2 ELSE 3 END, total_views DESC`,
+    nicheId ?? null,
+  );
+  return rows.map((r) => ({ ...r, structure: JSON.parse(r.structure) as string[] }));
+}
+
+export function getFormat(formatId: string): Format | undefined {
+  return listFormats().find((f) => f.id === formatId);
+}
+
+export function listTrendingPosts(opts: { nicheId?: string; formatId?: string } = {}): TrendingPost[] {
+  return all<TrendingPost>(
+    `SELECT t.*, f.name AS format_name, c.handle, c.followers,
+       COALESCE(t.saves * 1.0 / NULLIF(t.views, 0), 0) AS save_rate,
+       COALESCE(t.views * 1.0 / NULLIF(c.followers, 0), 0) AS reach_multiple
+     FROM trending_posts t
+     LEFT JOIN creators c ON c.id = t.creator_id
+     LEFT JOIN formats f ON f.id = t.format_id
+     WHERE (?1 IS NULL OR t.niche_id = ?1) AND (?2 IS NULL OR t.format_id = ?2)
+     ORDER BY reach_multiple DESC`,
+    opts.nicheId ?? null,
+    opts.formatId ?? null,
+  );
+}
+
+// Breakout = account is young and grew fast in the last 30 days.
+export function listCreators(nicheId?: string): Creator[] {
+  return all<Creator>(
+    `SELECT c.id, c.platform, c.handle, COALESCE(c.display_name, c.handle) AS display_name, c.followers, c.followers_30d_ago,
+       COALESCE((c.followers - c.followers_30d_ago) * 1.0 / NULLIF(c.followers_30d_ago, 0), 0) AS growth_30d,
+       CAST(julianday('now') - julianday(COALESCE(c.first_post_at, c.updated_at)) AS INTEGER) AS account_age_days,
+       c.source,
+       (SELECT f.name FROM trending_posts t JOIN formats f ON f.id = t.format_id
+         WHERE t.creator_id = c.id GROUP BY f.id ORDER BY SUM(t.views) DESC LIMIT 1) AS top_format
+     FROM creators c
+     WHERE (?1 IS NULL OR c.niche_id = ?1)
+     ORDER BY growth_30d DESC`,
+    nicheId ?? null,
+  );
+}
+
+// ---------- Recreate ----------
+
+export function listIdeas(): Idea[] {
+  return all<Idea>(
+    `SELECT i.*, f.name AS format_name, (SELECT COUNT(*) FROM assets a WHERE a.idea_id = i.id) AS assets
+     FROM ideas i LEFT JOIN formats f ON f.id = i.format_id
+     ORDER BY COALESCE(i.scheduled_for, i.created_at) ASC`,
+  );
+}
+
+export function getIdea(ideaId: string): Idea | undefined {
+  return listIdeas().find((i) => i.id === ideaId);
+}
+
+export function listAssets(ideaId?: string): Asset[] {
+  return all<Asset>(
+    `SELECT a.*, i.title AS idea_title FROM assets a LEFT JOIN ideas i ON i.id = a.idea_id
+     WHERE (?1 IS NULL OR a.idea_id = ?1) ORDER BY a.created_at DESC`,
+    ideaId ?? null,
+  );
+}
+
+// ---------- Track ----------
+
+const FUNNEL_SELECT = `
+  COALESCE(m.views, 0) AS views, COALESCE(m.likes, 0) AS likes, COALESCE(m.comments, 0) AS comments,
+  COALESCE(m.shares, 0) AS shares, COALESCE(m.saves, 0) AS saves,
+  COALESCE(m.profile_visits, 0) AS profile_visits, COALESCE(m.follows, 0) AS follows,
+  (SELECT COUNT(*) FROM events e WHERE e.post_id = p.id AND e.type = 'comment_keyword') AS keyword_comments,
+  (SELECT COUNT(*) FROM events e WHERE e.post_id = p.id AND e.type = 'dm_sent') AS dms,
+  (SELECT COUNT(*) FROM events e WHERE e.post_id = p.id AND e.type = 'link_click') AS clicks,
+  (SELECT COUNT(*) FROM events e WHERE e.post_id = p.id AND e.type = 'optin') AS optins,
+  (SELECT COUNT(*) FROM events e WHERE e.post_id = p.id AND e.type = 'purchase') AS purchases,
+  (SELECT COALESCE(SUM(value_cents), 0) FROM events e WHERE e.post_id = p.id AND e.type = 'purchase') AS revenue_cents`;
+
+export function listPostsWithFunnel(): PostWithFunnel[] {
+  return all<PostWithFunnel>(
+    `SELECT p.*, f.name AS format_name,
+       (SELECT keyword FROM keywords k WHERE k.post_id = p.id LIMIT 1) AS keyword,
+       (SELECT slug FROM links l WHERE l.post_id = p.id LIMIT 1) AS link_slug,
+       ${FUNNEL_SELECT}
+     FROM posts p
+     LEFT JOIN ideas i ON i.id = p.idea_id
+     LEFT JOIN formats f ON f.id = i.format_id
+     LEFT JOIN post_metrics m ON m.post_id = p.id
+       AND m.captured_at = (SELECT MAX(captured_at) FROM post_metrics WHERE post_id = p.id)
+     ORDER BY p.published_at DESC`,
+  );
+}
+
+export function getPostMetricsSeries(postId: string) {
+  return all<{ captured_at: string; views: number; follows: number }>(
+    "SELECT captured_at, views, follows FROM post_metrics WHERE post_id = ? ORDER BY captured_at",
+    postId,
+  );
+}
+
+export function getTotals(): Funnel {
+  const posts = listPostsWithFunnel();
+  const sum = (k: keyof Funnel) => posts.reduce((acc, p) => acc + p[k], 0);
+  const bio = one<{ clicks: number }>(
+    "SELECT COUNT(*) AS clicks FROM events WHERE post_id IS NULL AND type = 'link_click'",
+  );
+  return {
+    views: sum("views"),
+    likes: sum("likes"),
+    comments: sum("comments"),
+    shares: sum("shares"),
+    saves: sum("saves"),
+    profile_visits: sum("profile_visits"),
+    follows: sum("follows"),
+    keyword_comments: sum("keyword_comments"),
+    dms: sum("dms"),
+    clicks: sum("clicks") + (bio?.clicks ?? 0),
+    optins: sum("optins"),
+    purchases: sum("purchases"),
+    revenue_cents: sum("revenue_cents"),
+  };
+}
+
+export type LinkRow = {
+  slug: string;
+  destination: string;
+  label: string;
+  post_id: string | null;
+  post_caption: string | null;
+  clicks: number;
+  purchases: number;
+  revenue_cents: number;
+};
+
+export function listLinks(): LinkRow[] {
+  return all<LinkRow>(
+    `SELECT l.*, p.caption AS post_caption,
+       (SELECT COUNT(*) FROM events e WHERE e.link_slug = l.slug AND e.type = 'link_click') AS clicks,
+       (SELECT COUNT(*) FROM events e WHERE e.link_slug = l.slug AND e.type = 'purchase') AS purchases,
+       (SELECT COALESCE(SUM(value_cents), 0) FROM events e WHERE e.link_slug = l.slug AND e.type = 'purchase') AS revenue_cents
+     FROM links l LEFT JOIN posts p ON p.id = l.post_id ORDER BY clicks DESC`,
+  );
+}
+
+export type KeywordRow = { keyword: string; post_id: string | null; link_slug: string | null; post_caption: string | null; hits: number };
+
+export function listKeywords(): KeywordRow[] {
+  return all<KeywordRow>(
+    `SELECT k.*, p.caption AS post_caption,
+       (SELECT COUNT(*) FROM events e WHERE e.keyword = k.keyword AND e.type = 'comment_keyword') AS hits
+     FROM keywords k LEFT JOIN posts p ON p.id = k.post_id ORDER BY hits DESC`,
+  );
+}
+
+export function listRecentEvents(limit = 12) {
+  return all<{ id: string; type: string; source: string; value_cents: number; created_at: string; post_caption: string | null; keyword: string | null; link_slug: string | null }>(
+    `SELECT e.id, e.type, e.source, e.value_cents, e.created_at, e.keyword, e.link_slug, p.caption AS post_caption
+     FROM events e LEFT JOIN posts p ON p.id = e.post_id ORDER BY e.created_at DESC LIMIT ?`,
+    limit,
+  );
+}
+
+export function getSyncStatus() {
+  return all<{ source: string; last: string; n: number }>(
+    "SELECT source, MAX(fetched_at) AS last, COUNT(*) AS n FROM trending_posts GROUP BY source",
+  );
+}
