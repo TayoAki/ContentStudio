@@ -71,7 +71,8 @@ export async function saveIdea(form: FormData) {
       notes: field(form, "notes"),
       platform: field(form, "platform") || undefined,
       status: IDEA_STATUSES.includes(status) ? status : undefined,
-      scheduled_for: date ? new Date(`${date}T12:00:00`).toISOString() : null,
+      // The date field only exists for Ready/Scheduled ideas; leave the date alone otherwise.
+      scheduled_for: form.has("scheduled_for") ? (date ? new Date(`${date}T12:00:00`).toISOString() : null) : undefined,
     });
   });
   revalidatePath("/recreate");

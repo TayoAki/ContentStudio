@@ -350,7 +350,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
     "save_videos_to_ideas",
     {
       title: "Save videos to the ideas pipeline",
-      description: "Save trending videos you want to replicate as ideas (one idea per video, pre-filled with the hook, format, stats and a link back to the original). Pass trending post ids or URLs. Saving the same video twice returns the existing idea.",
+      description: "Save trending videos to replicate as ideas (one idea per video). The video becomes the idea's REFERENCE: the idea is titled \"Recreate: …\", its hook is left empty, and the original hook, caption, stats and link go in the notes. Write a new script and generate new media for it; never repost the original. Pass trending post ids or URLs; saving the same video twice returns the existing idea.",
       inputSchema: {
         post_ids: z.array(z.string()).optional(),
         urls: z.array(z.string()).optional().describe("URLs of videos already stored as trending posts"),
@@ -370,7 +370,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
     "update_idea",
     {
       title: "Update an idea",
-      description: "Change any fields on an idea: rewrite the script, move its status, or schedule it (scheduled_for). Only fields you pass change.",
+      description: "Change any fields on an idea: rewrite the script, move its status, or schedule it (scheduled_for). Only fields you pass change. Only ideas in Ready can get a scheduled_for (setting one moves Ready to Scheduled); moving an idea back to idea/scripting/producing clears its date.",
       inputSchema: { idea_id: z.string(), ...Object.fromEntries(Object.entries(ideaShape).map(([k, v]) => [k, v.optional()])) },
     },
     handle(({ idea_id, ...patch }: { idea_id: string } & Record<string, unknown>) => ({ id: updateIdea(ws, idea_id, patch) })),

@@ -15,8 +15,9 @@ export type BoardIdea = {
   scheduled_for: string | null;
   created_by: string;
   assets: number;
-  thumb: string | null;
+  thumb: string | null; // your own attached media
   thumb_is_video: boolean;
+  ref_thumb: string | null; // the reference video's thumbnail (never posted)
   source_handle: string | null;
 };
 
@@ -25,12 +26,20 @@ const STAGES: Record<string, { label: string; hint: string; limit?: number }> = 
   idea: { label: "Ideas", hint: "Saved videos and raw ideas. Top = next up." },
   scripting: { label: "Scripting", hint: "Writing the hook and beats." },
   producing: { label: "Producing", hint: "Filming or generating. Finish before starting more.", limit: 3 },
-  ready: { label: "Ready", hint: "Done. Drag onto the calendar to schedule." },
-  scheduled: { label: "Scheduled", hint: "Has a publish date." },
-  posted: { label: "Posted", hint: "Live and being tracked." },
+  ready: { label: "Ready", hint: "Script done, new media made. Only Ready ideas can be scheduled." },
+  scheduled: { label: "Scheduled", hint: "Dated on the calendar. Schedule from the Calendar tab." },
+  posted: { label: "Posted", hint: "Live and tracked. Use Mark posted on the card." },
 };
 
 type Columns = Record<string, BoardIdea[]>;
+
+// Scheduled needs a date (set on the calendar); Posted needs Mark posted.
+function dropBlocked(status: string, idea: BoardIdea | undefined): string | null {
+  if (!idea) return null;
+  if (status === "scheduled" && !idea.scheduled_for) return "Move it to Ready, then drag it onto a day in the Calendar.";
+  if (status === "posted" && idea.status !== "posted") return "Open the card and use Mark posted with the post's URL.";
+  return null;
+}
 
 function group(ideas: BoardIdea[], statuses: readonly string[]): Columns {
   const cols: Columns = Object.fromEntries(statuses.map((s) => [s, []]));
@@ -49,8 +58,10 @@ export function KanbanBoard({ ideas, statuses, selectedId }: { ideas: BoardIdea[
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
+  const dragging = dragId ? Object.values(cols).flat().find((i) => i.id === dragId) : undefined;
+
   function onDragOverColumn(e: DragEvent, status: string) {
-    if (!dragId) return;
+    if (!dragId || dropBlocked(status, dragging)) return;
     e.preventDefault();
     // Insert before the first card whose midpoint is below the pointer.
     const cards = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>("[data-card]")];
@@ -94,16 +105,20 @@ export function KanbanBoard({ ideas, statuses, selectedId }: { ideas: BoardIdea[
           const stage = STAGES[status] ?? { label: status, hint: "" };
           const list = cols[status] ?? [];
           const over = stage.limit !== undefined && list.length > stage.limit;
+          const blocked = dropBlocked(status, dragging);
           return (
             <section
               key={status}
               aria-label={stage.label}
               onDragOver={(e) => onDragOverColumn(e, status)}
               onDrop={(e) => onDrop(e, status)}
-              className={`flex w-64 shrink-0 flex-col rounded-xl bg-surface-2 transition-colors ${
+              className={`relative flex w-64 shrink-0 flex-col rounded-xl bg-surface-2 transition-colors ${
                 drop?.status === status ? "ring-2 ring-accent/40" : ""
-              }`}
+              } ${blocked ? "opacity-60" : ""}`}
             >
+              {blocked && (
+                <p className="absolute inset-x-2 top-24 z-10 rounded-lg bg-surface px-3 py-2 text-center text-xs text-muted shadow-panel">{blocked}</p>
+              )}
               <header className="px-3 pb-2 pt-3">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold">{stage.label}</h3>
@@ -136,7 +151,7 @@ export function KanbanBoard({ ideas, statuses, selectedId }: { ideas: BoardIdea[
                 )}
               </div>
 
-              <QuickAdd status={status} />
+              {status !== "scheduled" && status !== "posted" && <QuickAdd status={status} />}
             </section>
           );
         })}
@@ -178,25 +193,34 @@ function IdeaCard({
       } ${dragging ? "opacity-40" : ""}`}
     >
       <div className="flex gap-2.5">
-        {idea.thumb && (
-          <div className="relative aspect-[9/16] w-11 shrink-0 overflow-hidden rounded-md bg-media">
+        {idea.thumb ? (
+          <div className="relative aspect-[9/16] w-11 shrink-0 overflow-hidden rounded-md bg-media" title="Your media">
             {idea.thumb_is_video ? (
               <video src={idea.thumb} muted preload="metadata" className="h-full w-full object-cover" />
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element -- proxied or uploaded media
+              // eslint-disable-next-line @next/next/no-img-element -- uploaded media
               <img src={idea.thumb} alt="" draggable={false} className="h-full w-full object-cover" />
             )}
           </div>
-        )}
+        ) : idea.ref_thumb ? (
+          <div className="relative aspect-[9/16] w-11 shrink-0 overflow-hidden rounded-md bg-media" title="Reference video: recreate it, don't repost it">
+            {/* eslint-disable-next-line @next/next/no-img-element -- proxied platform thumbnail */}
+            <img src={idea.ref_thumb} alt="" draggable={false} className="h-full w-full object-cover opacity-60 grayscale" />
+            <span className="absolute inset-x-0 bottom-0 bg-black/70 py-px text-center text-[9px] font-semibold uppercase tracking-wide text-white">Ref</span>
+          </div>
+        ) : null}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium leading-snug [overflow-wrap:anywhere]">{idea.title}</p>
-          {idea.source_handle && <p className="truncate text-[11px] text-muted">from @{idea.source_handle}</p>}
+          {idea.source_handle && <p className="truncate text-[11px] text-muted">Reference: @{idea.source_handle}</p>}
           {idea.hook && idea.hook !== idea.title && <p className="mt-1 line-clamp-2 text-xs text-muted">&ldquo;{idea.hook}&rdquo;</p>}
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
         {idea.format_name && <span className="max-w-full truncate rounded-full bg-sunken px-2 py-0.5">{idea.format_name}</span>}
         {idea.created_by === "claude" && <span className="rounded-full bg-ai-soft px-2 py-0.5 font-medium text-ai">claude</span>}
+        {!idea.thumb && (idea.status === "producing" || idea.status === "ready" || idea.status === "scheduled") && (
+          <span className="rounded-full bg-warn-soft px-2 py-0.5 font-medium text-warn" title="Attach your own image or video before posting">Needs media</span>
+        )}
         <span className="ml-auto flex items-center gap-2">
           <span className="font-medium uppercase">{idea.platform === "tiktok" ? "TT" : "IG"}</span>
           {idea.assets > 0 && (

@@ -71,7 +71,6 @@ type Href = (q: Record<string, string | undefined>) => string;
 // Shape the board and calendar share: plus a thumbnail (attached media first,
 // then the video being replicated).
 function toBoard(i: Idea): BoardIdea {
-  const thumb = i.cover_url ?? thumbSrc(i.source_thumbnail);
   return {
     id: i.id,
     title: i.title,
@@ -82,8 +81,9 @@ function toBoard(i: Idea): BoardIdea {
     scheduled_for: i.scheduled_for,
     created_by: i.created_by,
     assets: i.assets,
-    thumb,
+    thumb: i.cover_url,
     thumb_is_video: !!i.cover_url && i.cover_kind === "video",
+    ref_thumb: thumbSrc(i.source_thumbnail),
     source_handle: i.source_handle,
   };
 }
@@ -197,12 +197,16 @@ function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
         </Link>
       </div>
       {idea.source_post_id && (
-        <div className="flex gap-3 rounded-lg border border-line bg-background p-2">
+        <div className="rounded-lg border border-line bg-background p-2">
+          <p className="mb-2 rounded-md bg-warn-soft px-2 py-1.5 text-xs text-warn">
+            <b>Reference, not content.</b> Recreate the format with your own script and new media. Don&apos;t repost the original.
+          </p>
+          <div className="flex gap-3">
           <div className="w-20 shrink-0">
             <VideoTile url={idea.source_url ?? undefined} thumbnail={idea.source_thumbnail} hook={idea.source_hook ?? ""} views={idea.source_views ?? 0} likes={idea.source_likes ?? 0} saves={idea.source_saves ?? 0} />
           </div>
           <div className="min-w-0 text-xs">
-            <div className="font-semibold text-muted">Replicating</div>
+            <div className="font-semibold text-muted">Reference video</div>
             <div className="mt-0.5 font-medium">@{idea.source_handle}</div>
             <div className="mt-1 space-y-0.5 tabular-nums text-muted">
               {!!idea.source_views && <div>{compact(idea.source_views)} views</div>}
@@ -210,8 +214,9 @@ function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
               {!!idea.source_saves && <div>{compact(idea.source_saves)} saves</div>}
             </div>
             {idea.source_url && (
-              <a href={idea.source_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-accent underline">Open original</a>
+              <a href={idea.source_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-accent underline">Watch reference</a>
             )}
+          </div>
           </div>
         </div>
       )}
@@ -237,7 +242,9 @@ function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
           <label className="block text-xs text-muted">
             Status
             <select name="status" defaultValue={idea.status} className={input}>
-              {IDEA_STATUSES.map((s) => (
+              {IDEA_STATUSES.filter(
+                (s) => s === idea.status || (s !== "posted" && (s !== "scheduled" || idea.status === "ready")),
+              ).map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
@@ -250,16 +257,22 @@ function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
             </select>
           </label>
         </div>
-        <label className="block text-xs text-muted">
-          Scheduled for
-          <input type="date" name="scheduled_for" defaultValue={idea.scheduled_for?.slice(0, 10) ?? ""} className={input} />
-        </label>
+        {idea.status === "ready" || idea.status === "scheduled" ? (
+          <label className="block text-xs text-muted">
+            Publish date
+            <input type="date" name="scheduled_for" defaultValue={idea.scheduled_for?.slice(0, 10) ?? ""} className={input} />
+          </label>
+        ) : idea.status !== "posted" ? (
+          <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">
+            Scheduling unlocks in <b>Ready</b>: finish the script and attach your own media first.
+          </p>
+        ) : null}
         <button className="btn btn-primary btn-block">Save</button>
       </form>
 
       {idea.status !== "posted" && (
         <div className="flex flex-wrap gap-1">
-          {IDEA_STATUSES.filter((s) => s !== idea.status && s !== "posted").map((s) => (
+          {IDEA_STATUSES.filter((s) => s !== idea.status && s !== "posted" && s !== "scheduled").map((s) => (
             <form key={s} action={moveIdea}>
               <input type="hidden" name="id" value={idea.id} />
               <input type="hidden" name="status" value={s} />
