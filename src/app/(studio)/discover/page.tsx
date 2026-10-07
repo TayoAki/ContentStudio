@@ -16,7 +16,7 @@ import { Badge, Card, SectionTitle, SidebarLink, SidebarSection, Workspace } fro
 import { requireSession } from "@/lib/auth";
 import { claudeBrief } from "@/lib/brief";
 import { thumbSrc } from "@/lib/thumbs";
-import { compact, pct } from "@/lib/format";
+import { compact, pct, shortDate } from "@/lib/format";
 import {
   byReach,
   groupByCategory,
@@ -26,6 +26,7 @@ import {
   listTrendingPosts,
   type Format,
   type TrendAccount,
+  type TrendingPost,
 } from "@/lib/queries";
 
 const TABS = ["accounts", "formats", "videos"] as const;
@@ -217,20 +218,56 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
 
       {tab === "videos" && nicheId && (
         <>
-          <SectionTitle title="Top videos" subtitle="Every stored video in this niche, by views. Badge shows the reach multiple (views ÷ followers)." />
+          <SectionTitle title="Top videos" subtitle="Every stored video in this niche, by views. — means the platform doesn’t report that stat (Instagram hides saves and shares, and views on photo posts)." />
           {videos.length === 0 && <EmptyHint />}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
             {[...videos].sort(byReach).map((v) => (
               <div key={v.id}>
                 <VideoTile url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={v.platform}
                   label={v.reach_multiple >= 1 ? `${v.reach_multiple.toFixed(1)}x` : undefined} />
-                <div className="mt-1 truncate text-xs text-muted">@{v.handle}{v.format_name ? ` · ${v.format_name}` : ""}</div>
+                <VideoStats video={v} />
               </div>
             ))}
           </div>
         </>
       )}
     </Workspace>
+  );
+}
+
+// A zero we can't distinguish from "not reported" is shown as a dash.
+const stat = (n: number) => (n > 0 ? compact(n) : "—");
+
+function VideoStats({ video: v }: { video: TrendingPost }) {
+  const engagement = v.likes + v.comments + v.shares + v.saves;
+  // Engagement against views when we have them, otherwise against followers.
+  const base = v.views > 0 ? v.views : v.followers;
+  const rows: [string, string, string?][] = [
+    ["Views", stat(v.views)],
+    ["Likes", stat(v.likes)],
+    ["Comments", stat(v.comments)],
+    ["Saves", stat(v.saves)],
+    ["Shares", stat(v.shares)],
+    ["Eng. rate", base > 0 && engagement > 0 ? pct(engagement / base) : "—", v.views > 0 ? "(likes + comments + shares + saves) ÷ views" : "(likes + comments + shares + saves) ÷ followers, since there is no view count"],
+    ["Save rate", v.views > 0 && v.saves > 0 ? pct(v.save_rate) : "—", "saves ÷ views"],
+    ["Reach", v.views > 0 && v.followers > 0 ? `${v.reach_multiple.toFixed(1)}x` : "—", "views ÷ followers"],
+  ];
+  return (
+    <div className="mt-1.5 rounded-lg border border-line bg-surface p-2 text-[11px]">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate font-medium">@{v.handle}</span>
+        <span className="shrink-0 text-muted">{shortDate(v.posted_at)}</span>
+      </div>
+      {v.format_name && <div className="truncate text-muted">{v.format_name}</div>}
+      <dl className="mt-1.5 space-y-0.5">
+        {rows.map(([label, value, hint]) => (
+          <div key={label} className="flex justify-between gap-2 border-b border-line/60 pb-0.5 last:border-0" title={hint}>
+            <dt className="text-muted">{label}</dt>
+            <dd className="font-medium tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
 
