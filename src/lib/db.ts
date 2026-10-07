@@ -217,6 +217,11 @@ const COLUMNS: [table: string, column: string, definition: string][] = [
   ["creators", "bio", "TEXT"],
   ["creators", "avatar_url", "TEXT"],
   ["ideas", "source_post_id", "TEXT"], // the trending video this idea replicates
+  ["ideas", "position", "REAL"], // order within its board column (lower = higher priority)
+  ["trending_posts", "video_url", "TEXT"], // platform CDN video, played inline via /api/media
+  ["assets", "mime", "TEXT"], // uploaded files only
+  ["assets", "size", "INTEGER"],
+  ["assets", "filename", "TEXT"],
 ];
 
 function migrate(conn: DatabaseSync) {

@@ -40,7 +40,7 @@ export function Workspace({
         </nav>
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">{children}</div>
       </main>
-      <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-line bg-surface p-5 xl:block">{right}</aside>
+      {right && <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-line bg-surface p-5 xl:block">{right}</aside>}
     </div>
   );
 }

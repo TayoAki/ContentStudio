@@ -11,12 +11,18 @@ import {
   createTrackedLink,
   recordPost,
   setFormatStatus as setFormatStatusFor,
+  attachAsset,
+  deleteAssetRow,
+  quickAddIdea,
+  reorderColumn,
   saveVideoAsIdea,
+  scheduleIdea,
   updateCreatorMeta,
   updateIdea,
   upsertIdea,
   upsertNiche,
 } from "@/lib/ingest";
+import { removeUpload } from "@/lib/uploads";
 import { getFormat, getIdea, IDEA_STATUSES, type IdeaStatus } from "@/lib/queries";
 
 // Every action re-checks the session and scopes writes to its workspace:
@@ -159,6 +165,57 @@ export async function updateAccount(form: FormData) {
     }),
   );
   revalidatePath("/discover");
+}
+
+// ---------- Board, calendar and assets (called from client components) ----------
+
+const isIdList = (v: unknown): v is string[] =>
+  Array.isArray(v) && v.length <= 500 && v.every((x) => typeof x === "string" && x.length < 64);
+
+export async function reorderIdeas(status: string, ids: string[]): Promise<{ error?: string }> {
+  const { workspaceId: ws } = await requireSession();
+  if (typeof status !== "string" || !isIdList(ids)) return { error: "Bad request" };
+  try {
+    reorderColumn(ws, status, ids);
+  } catch (err) {
+    if (err instanceof IngestError) return { error: err.message };
+    throw err;
+  }
+  revalidatePath("/recreate");
+  return {};
+}
+
+export async function setIdeaDate(ideaId: string, when: string | null): Promise<{ error?: string }> {
+  const { workspaceId: ws } = await requireSession();
+  if (typeof ideaId !== "string" || (when !== null && typeof when !== "string")) return { error: "Bad request" };
+  try {
+    scheduleIdea(ws, ideaId, when);
+  } catch (err) {
+    if (err instanceof IngestError) return { error: err.message };
+    throw err;
+  }
+  revalidatePath("/recreate");
+  return {};
+}
+
+export async function quickAddIdeaAction(form: FormData) {
+  const { workspaceId: ws } = await requireSession();
+  await guarded(() => void quickAddIdea(ws, field(form, "title"), field(form, "status")));
+  revalidatePath("/recreate");
+}
+
+export async function attachAssetAction(form: FormData) {
+  const { workspaceId: ws } = await requireSession();
+  await guarded(() => attachAsset(ws, field(form, "asset_id"), field(form, "idea_id") || null));
+  revalidatePath("/recreate");
+}
+
+export async function deleteAssetAction(form: FormData) {
+  const { workspaceId: ws } = await requireSession();
+  const assetId = field(form, "asset_id");
+  const row = deleteAssetRow(ws, assetId);
+  if (row?.url.startsWith("/api/uploads/")) await removeUpload(ws, assetId);
+  revalidatePath("/recreate");
 }
 
 // ---------- Settings ----------

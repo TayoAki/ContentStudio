@@ -226,7 +226,7 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
             {[...videos].sort(byReach).map((v) => (
               <div key={v.id}>
-                <VideoTile url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={v.platform}
+                <VideoTile url={v.url} thumbnail={v.thumbnail_url} videoUrl={v.video_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={v.platform}
                   label={v.reach_multiple >= 1 ? `${v.reach_multiple.toFixed(1)}x` : undefined} />
                 <VideoStats video={v} ideaId={saved.get(v.id)} />
               </div>
@@ -246,8 +246,8 @@ function SavableTile({ video: v, saved, size, platform, label }: {
 }) {
   return (
     <div className="relative shrink-0">
-      <VideoTile size={size} url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={platform} label={label} />
-      <div className="absolute bottom-1.5 right-1.5">
+      <VideoTile size={size} url={v.url} thumbnail={v.thumbnail_url} videoUrl={v.video_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={platform} label={label} />
+      <div className="absolute right-1.5 top-1.5 z-20">
         <SaveIdeaButton postId={v.id} ideaId={saved.get(v.id)} compact />
       </div>
     </div>

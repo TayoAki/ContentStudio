@@ -35,6 +35,7 @@ export type TrendingPost = {
   format_id: string | null;
   format_name: string | null;
   creator_id: string | null;
+  video_url: string | null;
   handle: string;
   followers: number;
   save_rate: number;
@@ -81,6 +82,9 @@ export type Idea = {
   source_views: number | null;
   source_likes: number | null;
   source_saves: number | null;
+  position: number | null;
+  cover_url: string | null; // first attached image, for board and calendar thumbnails
+  cover_kind: string | null;
 };
 
 export const IDEA_STATUSES = ["idea", "scripting", "producing", "ready", "scheduled", "posted"] as const;
@@ -95,6 +99,9 @@ export type Asset = {
   label: string;
   created_by: string;
   created_at: string;
+  mime: string | null;
+  size: number | null;
+  filename: string | null;
 };
 
 export type Funnel = {
@@ -200,6 +207,8 @@ export function listCreators(ws: string, nicheId?: string): Creator[] {
 export function listIdeas(ws: string): Idea[] {
   return all<Idea>(
     `SELECT i.*, f.name AS format_name, (SELECT COUNT(*) FROM assets a WHERE a.idea_id = i.id) AS assets,
+       (SELECT a.url FROM assets a WHERE a.idea_id = i.id AND a.kind IN ('image', 'video') ORDER BY a.kind = 'video', a.created_at LIMIT 1) AS cover_url,
+       (SELECT a.kind FROM assets a WHERE a.idea_id = i.id AND a.kind IN ('image', 'video') ORDER BY a.kind = 'video', a.created_at LIMIT 1) AS cover_kind,
        t.url AS source_url, t.thumbnail_url AS source_thumbnail, t.hook AS source_hook, c.handle AS source_handle,
        t.views AS source_views, t.likes AS source_likes, t.saves AS source_saves
      FROM ideas i
@@ -207,7 +216,7 @@ export function listIdeas(ws: string): Idea[] {
      LEFT JOIN trending_posts t ON t.id = i.source_post_id
      LEFT JOIN creators c ON c.id = t.creator_id
      WHERE i.workspace_id = ?
-     ORDER BY COALESCE(i.scheduled_for, i.created_at) ASC`,
+     ORDER BY COALESCE(i.position, 1e15), i.created_at ASC`,
     ws,
   );
 }

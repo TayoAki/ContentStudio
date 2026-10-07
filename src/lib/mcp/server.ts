@@ -95,6 +95,7 @@ const trendingShape = {
   caption: z.string().optional(),
   transcript: z.string().optional(),
   thumbnail_url: z.string().optional(),
+  video_url: z.string().optional().describe("Direct video file URL (platform CDN); enables inline playback in Discover"),
   views: z.number().int().optional(),
   likes: z.number().int().optional(),
   comments: z.number().int().optional(),
@@ -379,7 +380,7 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
     "add_assets",
     {
       title: "Attach generated assets",
-      description: "Register images, videos, carousels or captions you generated, linked to an idea. url can be a public URL or a path under the app's /public folder.",
+      description: "Register images, videos, carousels or captions you generated, linked to an idea, by URL. To upload a local file instead, PUT its bytes to <app>/api/uploads?filename=<name>&idea_id=<idea> with Content-Type set and Authorization: Bearer <workspace API key>; it is stored and attached in one step.",
       inputSchema: {
         assets: z
           .array(

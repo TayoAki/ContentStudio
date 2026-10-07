@@ -16,6 +16,19 @@ export function isProxyable(url: string): boolean {
   return u.protocol === "https:" && ALLOWED.test(u.hostname);
 }
 
+// Platform video CDNs (TikTok serves video from *.tiktok.com as well).
+const VIDEO_ALLOWED = /(^|\.)(cdninstagram\.com|fbcdn\.net|tiktokcdn\.com|tiktokcdn-us\.com|tiktokcdn-eu\.com|tiktok\.com|byteoversea\.com)$/i;
+
+export function isProxyableVideo(url: string): boolean {
+  if (!URL.canParse(url)) return false;
+  const u = new URL(url);
+  return u.protocol === "https:" && VIDEO_ALLOWED.test(u.hostname);
+}
+
+export function mediaSrc(url: string | null | undefined): string | null {
+  return url && isProxyableVideo(url) ? `/api/media?u=${encodeURIComponent(url)}` : null;
+}
+
 export function thumbSrc(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith("/")) return url;
