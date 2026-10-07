@@ -21,7 +21,7 @@ export function FunnelChart({ steps }: { steps: Step[] }) {
             title={`${s.label}: ${s.value.toLocaleString()}${conv !== null ? ` (${pct(conv)} of ${prev!.label.toLowerCase()})` : ""}`}
           >
             <span role="cell" className="truncate text-muted">{s.label}</span>
-            <span role="cell" className="h-5 rounded-sm bg-zinc-100">
+            <span role="cell" className="h-5 rounded-sm bg-sunken">
               <span
                 className="block h-full rounded-r bg-accent opacity-85 transition-opacity group-hover:opacity-100"
                 style={{ width: `${width}%` }}

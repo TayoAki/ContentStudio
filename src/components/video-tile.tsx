@@ -28,7 +28,7 @@ export function VideoTile({
   const src = thumbSrc(thumbnail);
   const body = (
     <div
-      className={`group relative aspect-[9/16] overflow-hidden rounded-xl bg-gradient-to-b from-zinc-700 to-zinc-900 ${
+      className={`group relative aspect-[9/16] overflow-hidden rounded-xl bg-media ${
         size === "sm" ? "w-28" : "w-full"
       }`}
     >
@@ -53,7 +53,7 @@ export function VideoTile({
             {platform === "instagram" ? "IG" : platform === "tiktok" ? "TT" : platform}
           </span>
         )}
-        {label && <span className="rounded bg-white/90 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-900">{label}</span>}
+        {label && <span className="rounded bg-white/90 px-1.5 py-0.5 text-[9px] font-semibold text-black">{label}</span>}
       </div>
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-2 pt-8 text-white">
         {thumbnail && hook && <p className="line-clamp-2 text-[11px] font-medium leading-snug">{hook}</p>}

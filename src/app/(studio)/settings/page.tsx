@@ -10,8 +10,8 @@ import { db } from "@/lib/db";
 import { usageToday } from "@/lib/ingest";
 import { SC_DAILY_LIMIT } from "@/lib/integrations/scrapecreators";
 
-const input = "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm";
-const code = "block overflow-x-auto whitespace-pre rounded-lg bg-zinc-900 p-3 font-mono text-[11px] leading-relaxed text-zinc-100";
+const input = "field";
+const code = "block overflow-x-auto whitespace-pre rounded-lg bg-code-bg p-3 font-mono text-[11px] leading-relaxed text-code-fg";
 
 export default async function SettingsPage() {
   await connection();
@@ -30,12 +30,12 @@ export default async function SettingsPage() {
         <Flash />
         <section>
           <SectionTitle title="Workspace" subtitle={`Signed in as ${session.email}`} action={
-            <form action={logout}><button className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-surface">Log out</button></form>
+            <form action={logout}><button className="btn btn-secondary">Log out</button></form>
           } />
           <Card className="p-4">
             <form action={renameWorkspace} className="flex gap-2">
               <input name="name" defaultValue={ws.name} className={input} />
-              <button className="rounded-lg border border-line px-3 text-sm hover:bg-background">Rename</button>
+              <button className="btn btn-secondary">Rename</button>
             </form>
           </Card>
         </section>
@@ -47,14 +47,14 @@ export default async function SettingsPage() {
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-medium">API key</span>
                 <form action={regenerateApiKey}>
-                  <button className="rounded-lg border border-line px-3 py-1 text-xs hover:bg-background">
+                  <button className="btn btn-secondary btn-sm">
                     {ws.api_key_prefix ? "Regenerate (revokes the old key)" : "Generate key"}
                   </button>
                 </form>
               </div>
               {newKey ? (
-                <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                  <p className="text-xs text-amber-800">Copy it now. It won&apos;t be shown again.</p>
+                <div className="space-y-2 rounded-lg bg-warn-soft p-3">
+                  <p className="text-xs text-warn">Copy it now. It won&apos;t be shown again.</p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 truncate font-mono text-xs">{newKey}</code>
                     <CopyButton text={newKey} />
@@ -122,7 +122,7 @@ export default async function SettingsPage() {
                 placeholder={ws.stripe_webhook_secret ? "•••••••• (saved, paste to replace)" : "whsec_…"}
                 className={input}
               />
-              <button className="rounded-lg border border-line px-3 text-sm hover:bg-background">Save</button>
+              <button className="btn btn-secondary">Save</button>
             </form>
           </Card>
         </section>
