@@ -5,7 +5,7 @@ import { useActionState } from "react";
 import { Sparkles } from "lucide-react";
 import type { AuthState } from "@/app/(auth)/actions";
 
-const input = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm";
+const input = "field";
 
 export function AuthForm({
   mode,
@@ -24,7 +24,7 @@ export function AuthForm({
     <div className="flex min-h-dvh items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex items-center gap-2">
-          <span className="grid size-9 place-items-center rounded-lg bg-accent text-white">
+          <span className="grid size-9 place-items-center rounded-lg bg-accent text-accent-fg">
             <Sparkles size={18} />
           </span>
           <span className="text-lg font-semibold">ContentStudio</span>
@@ -64,8 +64,8 @@ export function AuthForm({
                 className={input}
               />
             </label>
-            {state.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
-            <button disabled={pending} className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {state.error && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{state.error}</p>}
+            <button disabled={pending} className="btn btn-primary btn-block">
               {pending ? "…" : signup ? "Create account" : "Log in"}
             </button>
           </form>

@@ -1,15 +1,17 @@
-import Image from "next/image";
 import Link from "next/link";
 import { connection } from "next/server";
-import { Bot, ChevronLeft, ChevronRight, FileText, Film, ImageIcon } from "lucide-react";
-import { markPosted, moveIdea, saveIdea } from "@/app/actions";
+import { Bot, FileText, Film, ImageIcon } from "lucide-react";
+import { attachAssetAction, deleteAssetAction, markPosted, moveIdea, saveIdea } from "@/app/actions";
+import { ContentCalendar } from "@/components/content-calendar";
+import { KanbanBoard, type BoardIdea } from "@/components/kanban-board";
+import { Uploader } from "@/components/uploader";
 import { Flash } from "@/components/flash";
-import { Badge, Card, SectionTitle, SidebarLink, SidebarSection, Workspace } from "@/components/workspace";
+import { Badge, EmptyState, SectionTitle, SidebarLink, SidebarSection, Workspace } from "@/components/workspace";
 import { requireSession } from "@/lib/auth";
-import { compact, shortDate } from "@/lib/format";
+import { compact } from "@/lib/format";
 import { thumbSrc } from "@/lib/thumbs";
 import { VideoTile } from "@/components/video-tile";
-import { IDEA_STATUSES, listAssets, listFormats, listIdeas, type Idea } from "@/lib/queries";
+import { IDEA_STATUSES, listAssets, listFormats, listIdeas, type Asset, type Idea } from "@/lib/queries";
 
 const TABS = ["board", "calendar", "library"] as const;
 type TabKey = (typeof TABS)[number];
@@ -21,9 +23,8 @@ export default async function RecreatePage({ searchParams }: PageProps<"/recreat
   const tab: TabKey = TABS.includes(sp.tab as TabKey) ? (sp.tab as TabKey) : "board";
   const ideas = listIdeas(ws);
   const selected = ideas.find((i) => i.id === sp.idea);
-  const month = typeof sp.month === "string" && /^\d{4}-\d{2}$/.test(sp.month) ? sp.month : new Date().toISOString().slice(0, 7);
   const href = (q: Record<string, string | undefined>) =>
-    `/recreate?${new URLSearchParams(Object.entries({ tab, idea: selected?.id, month, ...q }).filter((e): e is [string, string] => !!e[1]))}`;
+    `/recreate?${new URLSearchParams(Object.entries({ tab, idea: selected?.id, ...q }).filter((e): e is [string, string] => !!e[1]))}`;
 
   return (
     <Workspace
@@ -55,61 +56,124 @@ export default async function RecreatePage({ searchParams }: PageProps<"/recreat
           </SidebarSection>
         </>
       }
-      right={selected ? <IdeaEditor ws={ws} idea={selected} /> : <ClaudeHandoff />}
+      right={selected ? <IdeaEditor ws={ws} idea={selected} /> : tab === "library" ? <ClaudeHandoff /> : null}
     >
       <Flash />
-      {tab === "board" && <Board ideas={ideas} href={href} selectedId={selected?.id} />}
-      {tab === "calendar" && <Calendar ideas={ideas} month={month} href={href} />}
-      {tab === "library" && <Library ws={ws} />}
+      {tab === "board" && <Board ideas={ideas} selectedId={selected?.id} />}
+      {tab === "calendar" && <ContentCalendar ideas={ideas.map(toBoard)} />}
+      {tab === "library" && <Library ws={ws} filter={typeof sp.filter === "string" ? sp.filter : "all"} href={href} />}
     </Workspace>
   );
 }
 
 type Href = (q: Record<string, string | undefined>) => string;
 
-function IdeaCard({ idea, href, active }: { idea: Idea; href: Href; active?: boolean }) {
+// Shape the board and calendar share: plus a thumbnail (attached media first,
+// then the video being replicated).
+function toBoard(i: Idea): BoardIdea {
+  const thumb = i.cover_url ?? thumbSrc(i.source_thumbnail);
+  return {
+    id: i.id,
+    title: i.title,
+    hook: i.hook,
+    status: i.status,
+    format_name: i.format_name,
+    platform: i.platform,
+    scheduled_for: i.scheduled_for,
+    created_by: i.created_by,
+    assets: i.assets,
+    thumb,
+    thumb_is_video: !!i.cover_url && i.cover_kind === "video",
+    source_handle: i.source_handle,
+  };
+}
+
+function Board({ ideas, selectedId }: { ideas: Idea[]; selectedId?: string }) {
   return (
-    <Link href={href({ idea: idea.id })}>
-      <Card className={`p-3 transition-shadow hover:shadow-sm ${active ? "ring-2 ring-accent" : ""}`}>
-        <div className="flex gap-2">
-          {idea.source_post_id && (
-            <div className="relative aspect-[9/16] w-10 shrink-0 overflow-hidden rounded-md bg-zinc-800" title={`Replicating @${idea.source_handle}`}>
-              {thumbSrc(idea.source_thumbnail) && (
-                // eslint-disable-next-line @next/next/no-img-element -- proxied platform thumbnail
-                <img src={thumbSrc(idea.source_thumbnail)!} alt="" className="h-full w-full object-cover" />
-              )}
-            </div>
-          )}
-          <div className="min-w-0">
-            <div className="text-sm font-medium leading-snug [overflow-wrap:anywhere]">{idea.title}</div>
-            {idea.source_handle && <div className="truncate text-[11px] text-muted">from @{idea.source_handle}</div>}
-          </div>
-        </div>
-        {idea.hook && idea.hook !== idea.title && <p className="mt-1 line-clamp-2 text-xs text-muted">&ldquo;{idea.hook}&rdquo;</p>}
-        <div className="mt-2 flex flex-wrap items-center gap-1">
-          {idea.format_name && <Badge>{idea.format_name}</Badge>}
-          {idea.created_by === "claude" && <Badge tone="claude">claude</Badge>}
-          <span className="ml-auto text-[11px] text-muted">{shortDate(idea.scheduled_for)}</span>
-        </div>
-      </Card>
-    </Link>
+    <>
+      <SectionTitle
+        title="Ideas pipeline"
+        subtitle="Drag cards right as they progress and up or down to set priority. The top of each column is what to work on next."
+      />
+      <KanbanBoard ideas={ideas.map(toBoard)} statuses={IDEA_STATUSES} selectedId={selectedId} />
+    </>
   );
 }
 
-function Board({ ideas, href, selectedId }: { ideas: Idea[]; href: Href; selectedId?: string }) {
+const KIND_ICON = { image: ImageIcon, video: Film } as Record<string, typeof FileText>;
+
+function AssetPreview({ asset, className = "" }: { asset: Asset; className?: string }) {
+  const Icon = KIND_ICON[asset.kind] ?? FileText;
+  if (asset.kind === "video" && asset.url.startsWith("/api/uploads/")) {
+    return <video src={asset.url} controls preload="metadata" playsInline className={`h-full w-full bg-media object-contain ${className}`} />;
+  }
+  if (asset.kind === "image") {
+    // eslint-disable-next-line @next/next/no-img-element -- uploaded or external media
+    return <img src={asset.url} alt={asset.label} className={`h-full w-full object-cover ${className}`} />;
+  }
+  return (
+    <span className={`grid h-full w-full place-items-center bg-sunken text-muted ${className}`}>
+      <Icon size={28} />
+    </span>
+  );
+}
+
+const fileSize = (n: number | null) => (n ? (n > 1_048_576 ? `${(n / 1_048_576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`) : null);
+
+function Library({ ws, filter, href }: { ws: string; filter: string; href: Href }) {
+  const all = listAssets(ws);
+  const assets = filter === "unlinked" ? all.filter((a) => !a.idea_id) : all;
+  const ideas = listIdeas(ws).filter((i) => i.status !== "posted");
   return (
     <>
-      <SectionTitle title="Ideas pipeline" subtitle="Videos you save in Discover and scripts from Claude land here. Move them to posted to start tracking." />
-      <div className="grid gap-3 lg:grid-cols-3 2xl:grid-cols-6">
-        {IDEA_STATUSES.map((s) => (
-          <div key={s} className="min-w-0 rounded-xl bg-zinc-100/70 p-2">
-            <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted">{s}</div>
-            <div className="space-y-2">
-              {ideas
-                .filter((i) => i.status === s)
-                .map((i) => (
-                  <IdeaCard key={i.id} idea={i} href={href} active={i.id === selectedId} />
-                ))}
+      <SectionTitle
+        title="Asset library"
+        subtitle="Everything you upload or Claude generates. Link media to an idea and it shows on the board and calendar."
+        action={
+          <div className="flex rounded-lg border border-line-strong p-0.5 text-sm" role="group" aria-label="Filter">
+            {[["all", `All ${all.length}`], ["unlinked", `Unlinked ${all.filter((a) => !a.idea_id).length}`]].map(([key, label]) => (
+              <Link key={key} href={href({ tab: "library", filter: key === "all" ? undefined : key })}
+                className={`rounded-md px-3 py-1 ${filter === key || (key === "all" && filter !== "unlinked") ? "bg-accent text-accent-fg" : "text-muted hover:text-foreground"}`}>
+                {label}
+              </Link>
+            ))}
+          </div>
+        }
+      />
+      <Uploader />
+      {assets.length === 0 && (
+        <div className="mt-4">
+          <EmptyState title={filter === "unlinked" ? "Nothing unlinked" : "No media yet"}>
+            Upload your own footage and images above. When Claude generates media it can upload it too (PUT to{" "}
+            <code className="font-mono text-xs">/api/uploads</code> with your API key) or attach links with <code className="font-mono text-xs">add_assets</code>.
+          </EmptyState>
+        </div>
+      )}
+      <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3 2xl:grid-cols-5">
+        {assets.map((a) => (
+          <div key={a.id} className="overflow-hidden rounded-xl border border-line bg-surface">
+            <div className="aspect-[9/16] overflow-hidden bg-media">
+              <AssetPreview asset={a} />
+            </div>
+            <div className="space-y-2 p-2.5 text-xs">
+              <div>
+                <p className="truncate text-sm font-medium" title={a.filename ?? a.label}>{a.label || a.kind}</p>
+                <p className="text-muted">{[a.kind, fileSize(a.size), a.created_by === "claude" ? "by Claude" : null].filter(Boolean).join(" · ")}</p>
+              </div>
+              <form action={attachAssetAction} className="flex gap-1.5">
+                <input type="hidden" name="asset_id" value={a.id} />
+                <select name="idea_id" defaultValue={a.idea_id ?? ""} aria-label="Linked idea" className="field min-w-0 py-1 text-xs">
+                  <option value="">Not linked</option>
+                  {ideas.map((i) => (
+                    <option key={i.id} value={i.id}>{i.title.slice(0, 60)}</option>
+                  ))}
+                </select>
+                <button className="btn btn-secondary btn-sm">Link</button>
+              </form>
+              <form action={deleteAssetAction}>
+                <input type="hidden" name="asset_id" value={a.id} />
+                <button className="btn btn-ghost btn-sm text-bad">Delete</button>
+              </form>
             </div>
           </div>
         ))}
@@ -118,126 +182,11 @@ function Board({ ideas, href, selectedId }: { ideas: Idea[]; href: Href; selecte
   );
 }
 
-function Calendar({ ideas, month, href }: { ideas: Idea[]; month: string; href: Href }) {
-  const [y, m] = month.split("-").map(Number);
-  const first = new Date(y, m - 1, 1);
-  const daysInMonth = new Date(y, m, 0).getDate();
-  const lead = first.getDay();
-  const cells = Array.from({ length: Math.ceil((lead + daysInMonth) / 7) * 7 }, (_, i) => i - lead + 1);
-  const key = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-  const byDay = new Map<string, Idea[]>();
-  for (const idea of ideas) {
-    if (!idea.scheduled_for) continue;
-    const k = key(new Date(idea.scheduled_for));
-    byDay.set(k, [...(byDay.get(k) ?? []), idea]);
-  }
-  const shift = (delta: number) => {
-    const d = new Date(y, m - 1 + delta, 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  };
-  const today = key(new Date());
-  const unscheduled = ideas.filter((i) => !i.scheduled_for && i.status !== "posted");
-
-  return (
-    <>
-      <SectionTitle
-        title={first.toLocaleDateString("en", { month: "long", year: "numeric" })}
-        subtitle="Schedule ideas from the editor on the right."
-        action={
-          <div className="flex gap-1">
-            <Link href={href({ month: shift(-1) })} className="rounded-lg border border-line bg-surface p-1.5" aria-label="Previous month">
-              <ChevronLeft size={16} />
-            </Link>
-            <Link href={href({ month: shift(1) })} className="rounded-lg border border-line bg-surface p-1.5" aria-label="Next month">
-              <ChevronRight size={16} />
-            </Link>
-          </div>
-        }
-      />
-      <Card className="overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-line text-center text-xs text-muted">
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-            <div key={d} className="py-2">{d}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7">
-          {cells.map((day, i) => {
-            const inMonth = day >= 1 && day <= daysInMonth;
-            const k = key(new Date(y, m - 1, day));
-            return (
-              <div key={i} className={`min-h-24 border-b border-r border-line p-1.5 ${inMonth ? "" : "bg-zinc-50"}`}>
-                {inMonth && (
-                  <>
-                    <div className={`mb-1 text-xs ${k === today ? "font-bold text-accent" : "text-muted"}`}>{day}</div>
-                    {(byDay.get(k) ?? []).map((idea) => (
-                      <Link
-                        key={idea.id}
-                        href={href({ idea: idea.id })}
-                        className={`mb-1 block truncate rounded px-1.5 py-0.5 text-[11px] ${
-                          idea.status === "posted" ? "bg-emerald-50 text-emerald-800" : "bg-accent-soft text-accent"
-                        }`}
-                      >
-                        {idea.title}
-                      </Link>
-                    ))}
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-      {unscheduled.length > 0 && (
-        <div className="mt-6">
-          <h3 className="mb-2 text-sm font-semibold">Unscheduled</h3>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {unscheduled.map((i) => (
-              <IdeaCard key={i.id} idea={i} href={href} />
-            ))}
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-const KIND_ICON = { image: ImageIcon, video: Film } as Record<string, typeof FileText>;
-
-function Library({ ws }: { ws: string }) {
-  const assets = listAssets(ws);
-  return (
-    <>
-      <SectionTitle title="Asset library" subtitle="Images, videos and captions generated by Claude (or uploaded) and linked to ideas." />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {assets.map((a) => {
-          const Icon = KIND_ICON[a.kind] ?? FileText;
-          return (
-            <Card key={a.id} className="overflow-hidden">
-              <div className="relative grid h-44 place-items-center bg-zinc-100">
-                {a.kind === "image" && a.url.startsWith("/") ? (
-                  <Image src={a.url} alt={a.label} fill className="object-cover object-top" sizes="300px" />
-                ) : (
-                  <Icon className="text-zinc-300" size={32} />
-                )}
-              </div>
-              <div className="p-3 text-sm">
-                <div className="font-medium">{a.label || a.kind}</div>
-                <div className="text-xs text-muted">
-                  {a.idea_title ?? "Unlinked"} · {a.created_by}
-                </div>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-const input = "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm";
+const input = "field";
 
 function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
   const assets = listAssets(ws, idea.id);
+  const library = listAssets(ws).filter((a) => !a.idea_id);
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -253,7 +202,7 @@ function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
             <VideoTile url={idea.source_url ?? undefined} thumbnail={idea.source_thumbnail} hook={idea.source_hook ?? ""} views={idea.source_views ?? 0} likes={idea.source_likes ?? 0} saves={idea.source_saves ?? 0} />
           </div>
           <div className="min-w-0 text-xs">
-            <div className="font-semibold uppercase tracking-wide text-muted">Replicating</div>
+            <div className="font-semibold text-muted">Replicating</div>
             <div className="mt-0.5 font-medium">@{idea.source_handle}</div>
             <div className="mt-1 space-y-0.5 tabular-nums text-muted">
               {!!idea.source_views && <div>{compact(idea.source_views)} views</div>}
@@ -305,7 +254,7 @@ function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
           Scheduled for
           <input type="date" name="scheduled_for" defaultValue={idea.scheduled_for?.slice(0, 10) ?? ""} className={input} />
         </label>
-        <button className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90">Save</button>
+        <button className="btn btn-primary btn-block">Save</button>
       </form>
 
       {idea.status !== "posted" && (
@@ -314,26 +263,41 @@ function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
             <form key={s} action={moveIdea}>
               <input type="hidden" name="id" value={idea.id} />
               <input type="hidden" name="status" value={s} />
-              <button className="rounded-full border border-line px-2 py-0.5 text-[11px] text-muted hover:bg-background">→ {s}</button>
+              <button className="btn btn-secondary btn-sm">→ {s}</button>
             </form>
           ))}
         </div>
       )}
 
       <div>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Assets ({assets.length})</h4>
-        {assets.length === 0 && <p className="text-xs text-muted">None yet — Claude Code can attach them via the ingest API.</p>}
-        <div className="grid grid-cols-3 gap-2">
-          {assets.map((a) => (
-            <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="relative block aspect-square overflow-hidden rounded-lg bg-zinc-100">
-              {a.kind === "image" && a.url.startsWith("/") ? (
-                <Image src={a.url} alt={a.label} fill className="object-cover object-top" sizes="100px" />
-              ) : (
-                <span className="grid h-full place-items-center text-[10px] text-muted">{a.kind}</span>
-              )}
-            </a>
-          ))}
-        </div>
+        <h4 className="mb-2 text-xs font-semibold text-muted">Media ({assets.length})</h4>
+        {assets.length > 0 && (
+          <div className="mb-2 grid grid-cols-3 gap-2">
+            {assets.map((a) => (
+              <div key={a.id} className="group relative aspect-[9/16] overflow-hidden rounded-lg bg-media">
+                <AssetPreview asset={a} />
+                <form action={attachAssetAction} className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                  <input type="hidden" name="asset_id" value={a.id} />
+                  <input type="hidden" name="idea_id" value="" />
+                  <button className="rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] text-white" title="Unlink from this idea">Unlink</button>
+                </form>
+              </div>
+            ))}
+          </div>
+        )}
+        <Uploader ideaId={idea.id} compact />
+        {library.length > 0 && (
+          <form action={attachAssetAction} className="mt-2 flex gap-1.5">
+            <input type="hidden" name="idea_id" value={idea.id} />
+            <select name="asset_id" aria-label="Pick from library" className="field min-w-0 py-1 text-xs" defaultValue="">
+              <option value="" disabled>Pick from library…</option>
+              {library.map((a) => (
+                <option key={a.id} value={a.id}>{`${a.label || a.kind} (${a.kind})`}</option>
+              ))}
+            </select>
+            <button className="btn btn-secondary btn-sm">Attach</button>
+          </form>
+        )}
       </div>
 
       {idea.status !== "posted" && (
@@ -343,7 +307,7 @@ function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
             Published? Paste the post URL to start tracking
             <input name="url" type="url" placeholder="https://www.instagram.com/reel/…" className={input} />
           </label>
-          <button className="w-full rounded-lg border border-line px-3 py-2 text-sm font-medium hover:bg-background">Mark posted → Track</button>
+          <button className="btn btn-secondary btn-block">Mark posted → Track</button>
         </form>
       )}
     </div>
@@ -354,14 +318,14 @@ function ClaudeHandoff() {
   return (
     <div className="space-y-3 text-sm">
       <div className="flex items-center gap-2">
-        <Bot size={16} className="text-orange-600" />
+        <Bot size={16} className="text-ai" />
         <h3 className="font-semibold">Claude Code handoff</h3>
       </div>
       <p className="text-muted">
         Recreation happens in Claude Code. Copy a format brief from <Link href="/discover" className="text-accent underline">Discover</Link>,
         and Claude pushes scripts and generated media back here through the ingest API.
       </p>
-      <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-3 text-[11px] leading-relaxed text-zinc-100">{`POST /api/ingest/ideas
+      <pre className="overflow-x-auto rounded-lg bg-code-bg p-3 text-[11px] leading-relaxed text-code-fg">{`POST /api/ingest/ideas
 POST /api/ingest/assets
 POST /api/ingest/posts
 Authorization: Bearer $CONTENTSTUDIO_API_KEY`}</pre>

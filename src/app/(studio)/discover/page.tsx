@@ -13,7 +13,7 @@ import { CopyButton } from "@/components/copy-button";
 import { Flash } from "@/components/flash";
 import { SaveIdeaButton } from "@/components/save-idea-button";
 import { VideoTile } from "@/components/video-tile";
-import { Badge, Card, SectionTitle, SidebarLink, SidebarSection, Workspace } from "@/components/workspace";
+import { Badge, Card, EmptyState, SectionTitle, SidebarLink, SidebarSection, Workspace } from "@/components/workspace";
 import { requireSession } from "@/lib/auth";
 import { claudeBrief } from "@/lib/brief";
 import { thumbSrc } from "@/lib/thumbs";
@@ -34,8 +34,8 @@ import {
 const TABS = ["accounts", "formats", "videos"] as const;
 type TabKey = (typeof TABS)[number];
 
-const input = "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm";
-const button = "w-full rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90";
+const input = "field";
+const button = "btn btn-primary btn-block";
 
 // "1.0M in ~5 months": the speed of growth is the signal that a format, not an
 // existing audience, is doing the work.
@@ -103,7 +103,7 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
           {groups.length > 0 && (
             <SidebarSection title="Trend types">
               {groups.map(([category, list]) => (
-                <a key={category} href={`#${slug(category)}`} className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-background">
+                <a key={category} href={`#${slug(category)}`} className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-sunken">
                   <span className="truncate">{category}</span>
                   <span className="text-xs text-muted">{list.length}</span>
                 </a>
@@ -127,12 +127,12 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
               <form action={runCreatorSync} className="mt-3 space-y-2">
                 <input type="hidden" name="niche_id" value={nicheId} />
                 <textarea name="handles" rows={2} placeholder="@handle1, @handle2" className={input} />
-                <div className="flex gap-2">
-                  <select name="platform" className={`${input} w-auto`}>
+                <div className="grid grid-cols-2 gap-2">
+                  <select name="platform" aria-label="Platform" className={input}>
                     <option value="instagram">Instagram</option>
                     <option value="tiktok">TikTok</option>
                   </select>
-                  <button className={`${button} flex-1`}>Sync accounts</button>
+                  <button className={button}>Sync</button>
                 </div>
               </form>
               <p className="mt-2 text-[11px] text-muted">Each search or handle uses 1 request of your daily allowance.</p>
@@ -183,10 +183,10 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
         <>
           <SectionTitle title="Winning formats" subtitle="The repeatable pattern behind the top videos, shaped like the videos themselves." />
           {formats.length === 0 && (
-            <Card className="p-6 text-sm text-muted">
-              No formats yet. Ask Claude to cluster the top videos into formats (<code>save_format</code>), or run{" "}
-              <code>/mcp__contentstudio__find_and_recreate</code> in Claude Code.
-            </Card>
+            <EmptyState title="No formats yet">
+              A format is the repeatable pattern behind several top videos. Ask Claude to group this niche&apos;s videos into
+              formats, or run <code className="font-mono text-xs">/mcp__contentstudio__find_and_recreate</code> in Claude Code.
+            </EmptyState>
           )}
           <div className="space-y-6">
             {formats.map((f) => {
@@ -226,7 +226,7 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
             {[...videos].sort(byReach).map((v) => (
               <div key={v.id}>
-                <VideoTile url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={v.platform}
+                <VideoTile url={v.url} thumbnail={v.thumbnail_url} videoUrl={v.video_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={v.platform}
                   label={v.reach_multiple >= 1 ? `${v.reach_multiple.toFixed(1)}x` : undefined} />
                 <VideoStats video={v} ideaId={saved.get(v.id)} />
               </div>
@@ -246,8 +246,8 @@ function SavableTile({ video: v, saved, size, platform, label }: {
 }) {
   return (
     <div className="relative shrink-0">
-      <VideoTile size={size} url={v.url} thumbnail={v.thumbnail_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={platform} label={label} />
-      <div className="absolute bottom-1.5 right-1.5">
+      <VideoTile size={size} url={v.url} thumbnail={v.thumbnail_url} videoUrl={v.video_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={platform} label={label} />
+      <div className="absolute right-1.5 top-1.5 z-20">
         <SaveIdeaButton postId={v.id} ideaId={saved.get(v.id)} compact />
       </div>
     </div>
@@ -300,7 +300,7 @@ function Avatar({ account, size = 40 }: { account: TrendAccount; size?: number }
     // eslint-disable-next-line @next/next/no-img-element -- platform CDN avatars, often short-lived
     <img src={thumbSrc(account.avatar_url) ?? ""} alt="" width={size} height={size} referrerPolicy="no-referrer" className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
   ) : (
-    <span className="grid shrink-0 place-items-center rounded-full bg-zinc-200 text-sm font-semibold uppercase text-zinc-600" style={{ width: size, height: size }}>
+    <span className="grid shrink-0 place-items-center rounded-full bg-sunken text-sm font-semibold uppercase text-muted" style={{ width: size, height: size }}>
       {account.handle.slice(0, 1)}
     </span>
   );
@@ -325,7 +325,7 @@ function AccountRow({ account: a, href, active, saved }: { account: TrendAccount
         </Link>
 
         <div className="min-w-0 text-sm">
-          <div className="mb-1 text-xs uppercase tracking-wide text-muted">Best video</div>
+          <div className="mb-1 text-xs text-muted">Best video</div>
           {a.best ? (
             <p className="line-clamp-2">
               <span className="font-semibold tabular-nums">
@@ -340,7 +340,7 @@ function AccountRow({ account: a, href, active, saved }: { account: TrendAccount
         </div>
 
         <div className="text-sm">
-          <div className="mb-1 text-xs uppercase tracking-wide text-muted">What it sells</div>
+          <div className="mb-1 text-xs text-muted">What it sells</div>
           {a.sells ? (
             <div className="flex items-start gap-1.5">
               <ShoppingBag size={14} className="mt-0.5 shrink-0 text-good" />
@@ -391,7 +391,7 @@ function AccountPanel({ account: a, nicheId, saved }: { account: TrendAccount; n
       {a.bio && <p className="whitespace-pre-line text-sm text-muted">{a.bio}</p>}
 
       <div>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+        <h4 className="mb-2 text-xs font-semibold text-muted">
           Top videos ({a.video_count} stored · {compact(a.total_views)} views)
         </h4>
         <div className="grid grid-cols-3 gap-2">
@@ -415,7 +415,7 @@ function AccountPanel({ account: a, nicheId, saved }: { account: TrendAccount; n
           Shop link
           <input name="sells_url" defaultValue={a.sells_url ?? ""} className={input} />
         </label>
-        <button className="w-full rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-background">Save labels</button>
+        <button className="btn btn-secondary btn-block">Save labels</button>
       </form>
 
       <form action={runCreatorSync}>
@@ -430,9 +430,10 @@ function AccountPanel({ account: a, nicheId, saved }: { account: TrendAccount; n
 
 function EmptyHint() {
   return (
-    <Card className="p-6 text-sm text-muted">
-      Nothing here yet. Search Instagram Reels or sync accounts you admire (left sidebar), or ask Claude to do it through MCP.
-    </Card>
+    <EmptyState title="No accounts or videos in this niche yet">
+      Use <b>Search Instagram Reels</b> in the sidebar with one of your niche keywords, or paste a few handles you admire into{" "}
+      <b>Sync accounts</b>. Claude can also do this for you over MCP.
+    </EmptyState>
   );
 }
 
@@ -462,13 +463,13 @@ function FormatPanel({ ws, format, saved }: { ws: string; format: Format; saved:
     <div className="space-y-5">
       <div>
         <div className="flex items-center gap-2">
-          <Flame size={16} className="text-orange-500" />
+          <Flame size={16} className="text-ai" />
           <h3 className="font-semibold">{format.name}</h3>
         </div>
         <p className="mt-1 text-sm text-muted">{format.summary}</p>
       </div>
       <div>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Structure</h4>
+        <h4 className="mb-2 text-xs font-semibold text-muted">Structure</h4>
         <ol className="space-y-1.5 text-sm">
           {format.structure.map((beat, i) => (
             <li key={i} className="flex gap-2">
@@ -479,11 +480,11 @@ function FormatPanel({ ws, format, saved }: { ws: string; format: Format; saved:
         </ol>
       </div>
       <div>
-        <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Why it works</h4>
+        <h4 className="mb-1 text-xs font-semibold text-muted">Why it works</h4>
         <p className="text-sm">{format.why_it_works}</p>
       </div>
       <div>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Examples</h4>
+        <h4 className="mb-2 text-xs font-semibold text-muted">Examples</h4>
         <div className="grid grid-cols-3 gap-2">
           {examples.slice(0, 6).map((v) => (
             <SavableTile key={v.id} video={v} saved={saved} />
@@ -493,18 +494,18 @@ function FormatPanel({ ws, format, saved }: { ws: string; format: Format; saved:
       <div className="space-y-2 border-t border-line pt-4">
         <form action={createIdeaFromFormat}>
           <input type="hidden" name="format_id" value={format.id} />
-          <button className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90">Recreate this format →</button>
+          <button className="btn btn-primary btn-block">Recreate this format →</button>
         </form>
         <div className="flex items-center justify-between gap-2">
           <CopyButton text={claudeBrief(format, examples, appUrl)} label="Copy Claude brief" />
-          <form action={setFormatStatus} className="flex">
+          <form action={setFormatStatus} className="flex items-center gap-1.5">
             <input type="hidden" name="id" value={format.id} />
-            <select name="status" defaultValue={format.status} className="rounded-l-lg border border-line bg-surface px-2 py-1.5 text-sm">
+            <select name="status" defaultValue={format.status} aria-label="Format status" className="field w-auto py-1">
               {["watching", "testing", "winner", "retired"].map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
-            <button className="rounded-r-lg border border-l-0 border-line px-2 text-sm hover:bg-background">Set</button>
+            <button className="btn btn-secondary btn-sm">Set</button>
           </form>
         </div>
       </div>

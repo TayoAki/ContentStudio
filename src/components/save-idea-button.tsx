@@ -15,8 +15,8 @@ function Submit({ compact }: { compact: boolean }) {
       aria-label="Save to Ideas"
       className={
         compact
-          ? "grid size-7 place-items-center rounded-full bg-white/90 text-zinc-900 shadow hover:bg-white disabled:opacity-70"
-          : "flex w-full items-center justify-center gap-1.5 rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-white hover:opacity-90 disabled:opacity-70"
+          ? "grid size-7 place-items-center rounded-full bg-white/90 text-black shadow transition-colors hover:bg-white disabled:opacity-70"
+          : "btn btn-primary btn-sm btn-block"
       }
     >
       <Icon size={compact ? 14 : 12} className={pending ? "animate-spin" : ""} />
@@ -36,8 +36,8 @@ export function SaveIdeaButton({ postId, ideaId, compact = false }: { postId: st
         aria-label="Saved: open in Ideas"
         className={
           compact
-            ? "grid size-7 place-items-center rounded-full bg-emerald-500 text-white shadow"
-            : "flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100"
+            ? "grid size-7 place-items-center rounded-full bg-good text-accent-fg shadow"
+            : "btn btn-sm btn-block bg-good-soft text-good hover:bg-good hover:text-accent-fg"
         }
       >
         <BookmarkCheck size={compact ? 14 : 12} />

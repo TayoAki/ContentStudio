@@ -19,17 +19,17 @@ export async function BottomBar() {
     Stripe: !!stripe.ok,
   };
   return (
-    <footer className="flex h-8 shrink-0 items-center gap-5 border-t border-line bg-surface px-4 text-[11px] text-muted">
+    <footer className="flex h-8 shrink-0 items-center gap-5 overflow-hidden whitespace-nowrap border-t border-line bg-surface-2 px-4 text-[11px] text-muted">
       <span className="font-medium text-foreground">{session.workspaceName}</span>
       {sync.map((s) => (
-        <span key={s.source}>
+        <span key={s.source} className="hidden md:inline">
           {s.source}: {s.n} posts · synced {ago(s.last.replace(" ", "T") + "Z")}
         </span>
       ))}
       <span className="flex-1" />
       {Object.entries(keys).map(([name, ok]) => (
         <span key={name} className="flex items-center gap-1">
-          <span className={`size-1.5 rounded-full ${ok ? "bg-good" : "bg-zinc-300"}`} />
+          <span className={`size-1.5 rounded-full ${ok ? "bg-good" : "bg-line-strong"}`} />
           {name}
         </span>
       ))}

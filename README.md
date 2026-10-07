@@ -55,6 +55,18 @@ Two MCP prompts show up as slash commands in Claude Code: `/mcp__contentstudio__
 
 Pair it with Virlo's MCP server for trend data; Claude moves results from Virlo into ContentStudio with `add_trending_posts`.
 
+## Media uploads
+
+Upload images and videos from the browser (Recreate → Asset library, or the Media section of an idea) or from scripts and Claude Code:
+
+```bash
+curl -X PUT "$APP_URL/api/uploads?filename=hook.mp4&idea_id=<idea id>" \
+  -H "Authorization: Bearer <workspace API key>" -H "Content-Type: video/mp4" \
+  --data-binary @hook.mp4
+```
+
+Files are stored on disk next to the database (the Railway volume), served only to members of the workspace, with seeking support for video. `UPLOAD_MAX_MB` caps the size (default 500).
+
 ## How attribution works
 
 1. Each post gets a tracked link (`/l/<slug>`) and optionally a ManyChat keyword (e.g. comment **BLAZER**).

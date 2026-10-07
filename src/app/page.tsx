@@ -12,12 +12,12 @@ export default function Home() {
     <div className="min-h-dvh">
       <header className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5">
         <div className="flex items-center gap-2 font-semibold">
-          <span className="grid size-8 place-items-center rounded-lg bg-accent text-white"><Sparkles size={16} /></span>
+          <span className="grid size-8 place-items-center rounded-lg bg-accent text-accent-fg"><Sparkles size={16} /></span>
           ContentStudio
         </div>
         <nav className="flex gap-2 text-sm">
-          <Link href="/login" className="rounded-lg px-3 py-1.5 hover:bg-surface">Log in</Link>
-          <Link href="/signup" className="rounded-lg bg-accent px-3 py-1.5 font-medium text-white">Start free</Link>
+          <Link href="/login" className="btn btn-ghost">Log in</Link>
+          <Link href="/signup" className="btn btn-primary">Start free</Link>
         </nav>
       </header>
       <main className="mx-auto max-w-5xl px-4 pb-16 pt-10">
@@ -27,7 +27,7 @@ export default function Home() {
         <p className="mt-4 max-w-xl text-lg text-muted">
           Short-form research, creation and attribution in one place, built to be driven by Claude.
         </p>
-        <Link href="/signup" className="mt-8 inline-block rounded-lg bg-accent px-5 py-3 font-medium text-white">
+        <Link href="/signup" className="btn btn-primary mt-8 px-5 py-2.5 text-base">
           Create your studio →
         </Link>
         <div className="mt-16 grid gap-4 sm:grid-cols-3">

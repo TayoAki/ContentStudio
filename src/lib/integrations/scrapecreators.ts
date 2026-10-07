@@ -27,6 +27,7 @@ export type ScrapedPost = {
   caption: string;
   hook: string;
   thumbnail_url: string | null;
+  video_url: string | null;
   views: number;
   likes: number;
   comments: number;
@@ -47,7 +48,7 @@ type Aweme = {
   url?: string;
   create_time_utc?: string;
   statistics?: { play_count?: number; digg_count?: number; comment_count?: number; share_count?: number; collect_count?: number };
-  video?: { cover?: { url_list?: string[] } };
+  video?: { cover?: { url_list?: string[] }; play_addr?: { url_list?: string[] } };
   author?: { unique_id?: string; nickname?: string; follower_count?: number; signature?: string; avatar_thumb?: { url_list?: string[] } };
 };
 
@@ -59,6 +60,7 @@ function fromAweme(v: Aweme, fallbackHandle: string): ScrapedPost {
     caption: v.desc ?? "",
     hook: firstLine(v.desc ?? ""),
     thumbnail_url: v.video?.cover?.url_list?.[0] ?? null,
+    video_url: v.video?.play_addr?.url_list?.[0] ?? null,
     views: v.statistics?.play_count ?? 0,
     likes: v.statistics?.digg_count ?? 0,
     comments: v.statistics?.comment_count ?? 0,
@@ -93,6 +95,7 @@ type IgNode = {
   taken_at_timestamp?: number;
   display_url?: string;
   thumbnail_src?: string;
+  video_url?: string | null;
   edge_media_preview_like?: { count?: number };
   edge_media_to_comment?: { count?: number };
   edge_media_to_caption?: { edges?: { node?: { text?: string } }[] };
@@ -135,6 +138,7 @@ export async function fetchInstagramProfile(ws: string, handle: string): Promise
       caption,
       hook: firstLine(caption),
       thumbnail_url: node.thumbnail_src ?? node.display_url ?? null,
+      video_url: node.is_video ? node.video_url ?? null : null,
       views: node.video_view_count ?? 0,
       likes: node.edge_media_preview_like?.count ?? 0,
       comments: node.edge_media_to_comment?.count ?? 0,
@@ -154,6 +158,7 @@ type IgReel = {
   caption?: string;
   thumbnail_src?: string;
   display_url?: string;
+  video_url?: string;
   video_view_count?: number;
   like_count?: number;
   comment_count?: number;
@@ -170,6 +175,7 @@ export async function searchInstagramReels(ws: string, query: string): Promise<S
     caption: r.caption ?? "",
     hook: firstLine(r.caption ?? ""),
     thumbnail_url: r.thumbnail_src ?? r.display_url ?? null,
+    video_url: r.video_url ?? null,
     views: r.video_view_count ?? 0,
     likes: r.like_count ?? 0,
     comments: r.comment_count ?? 0,

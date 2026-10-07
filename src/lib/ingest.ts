@@ -102,21 +102,22 @@ export function upsertTrendingPost(ws: string, input: Record<string, unknown>): 
   const postId = existing?.id ?? id("tp");
   run(
     `INSERT INTO trending_posts (id, workspace_id, platform, url, creator_id, niche_id, format_id, caption, hook, transcript, thumbnail_url,
-       views, likes, comments, shares, saves, posted_at, source, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       views, likes, comments, shares, saves, posted_at, source, video_url, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(workspace_id, url) DO UPDATE SET
        views = excluded.views, likes = excluded.likes, comments = excluded.comments,
        shares = excluded.shares, saves = excluded.saves,
        niche_id = COALESCE(excluded.niche_id, niche_id),
        format_id = COALESCE(excluded.format_id, format_id),
        thumbnail_url = COALESCE(excluded.thumbnail_url, thumbnail_url),
+       video_url = COALESCE(excluded.video_url, video_url),
        transcript = CASE WHEN excluded.transcript != '' THEN excluded.transcript ELSE transcript END,
        fetched_at = datetime('now')`,
     postId, ws, required(input.platform, "platform"), url, creatorId,
     owned(ws, "niches", optStr(input.niche_id)), owned(ws, "formats", optStr(input.format_id)),
     str(input.caption), str(input.hook), str(input.transcript), optStr(input.thumbnail_url),
     num(input.views), num(input.likes), num(input.comments), num(input.shares), num(input.saves),
-    optStr(input.posted_at), str(input.source, "manual"),
+    optStr(input.posted_at), str(input.source, "manual"), optStr(input.video_url),
   );
   return postId;
 }
@@ -230,6 +231,76 @@ export function addAsset(ws: string, input: Record<string, unknown>): string {
     str(input.label), str(input.created_by, "claude"),
   );
   return assetId;
+}
+
+// Kanban: persist a column's order (and move cards into it). ids are the
+// column's full top-to-bottom order after the drop.
+export function reorderColumn(ws: string, status: string, ids: string[]) {
+  if (!IDEA_STATUSES.includes(status as IdeaStatus)) throw new IngestError("Bad status");
+  const conn = db();
+  conn.exec("BEGIN");
+  try {
+    ids.forEach((ideaId, i) => {
+      owned(ws, "ideas", ideaId);
+      conn
+        .prepare("UPDATE ideas SET status = ?, position = ?, updated_at = datetime('now') WHERE id = ? AND workspace_id = ?")
+        .run(status, i, ideaId, ws);
+    });
+    conn.exec("COMMIT");
+  } catch (err) {
+    conn.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+// Calendar: set or clear the date. Scheduling a ready idea marks it scheduled;
+// unscheduling a scheduled one puts it back to ready.
+export function scheduleIdea(ws: string, ideaId: string, when: string | null) {
+  const idea = db().prepare("SELECT status FROM ideas WHERE id = ? AND workspace_id = ?").get(ideaId, ws) as
+    | { status: string }
+    | undefined;
+  if (!idea) throw new IngestError(`Idea "${ideaId}" not found`);
+  if (when && Number.isNaN(Date.parse(when))) throw new IngestError("Bad date");
+  const status = when && idea.status === "ready" ? "scheduled" : !when && idea.status === "scheduled" ? "ready" : idea.status;
+  run(
+    "UPDATE ideas SET scheduled_for = ?, status = ?, updated_at = datetime('now') WHERE id = ? AND workspace_id = ?",
+    when ? new Date(when).toISOString() : null, status, ideaId, ws,
+  );
+}
+
+export function quickAddIdea(ws: string, title: string, status: string): string {
+  if (!IDEA_STATUSES.includes(status as IdeaStatus)) throw new IngestError("Bad status");
+  const top = db().prepare("SELECT MIN(position) AS p FROM ideas WHERE workspace_id = ? AND status = ?").get(ws, status) as { p: number | null };
+  const ideaId = upsertIdea(ws, { title: required(title, "title"), status, created_by: "user" });
+  run("UPDATE ideas SET position = ? WHERE id = ?", (top.p ?? 0) - 1, ideaId);
+  return ideaId;
+}
+
+// Uploaded files: the bytes live on disk (lib/uploads.ts); this is the row.
+export function addUploadedAsset(
+  ws: string,
+  input: { id: string; ideaId: string | null; kind: "image" | "video"; mime: string; size: number; filename: string; createdBy: string },
+): string {
+  run(
+    `INSERT INTO assets (id, workspace_id, idea_id, kind, url, label, created_by, mime, size, filename)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    input.id, ws, owned(ws, "ideas", input.ideaId), input.kind, `/api/uploads/${input.id}`,
+    input.filename.replace(/\.[^.]+$/, "").slice(0, 120), input.createdBy, input.mime, input.size, input.filename.slice(0, 255),
+  );
+  return input.id;
+}
+
+export function attachAsset(ws: string, assetId: string, ideaId: string | null) {
+  const row = db().prepare("SELECT workspace_id FROM assets WHERE id = ?").get(assetId) as { workspace_id: string } | undefined;
+  if (!row || row.workspace_id !== ws) throw new IngestError("Asset not found");
+  run("UPDATE assets SET idea_id = ? WHERE id = ? AND workspace_id = ?", owned(ws, "ideas", ideaId), assetId, ws);
+}
+
+export function deleteAssetRow(ws: string, assetId: string): { url: string } | null {
+  const row = db().prepare("SELECT url FROM assets WHERE id = ? AND workspace_id = ?").get(assetId, ws) as { url: string } | undefined;
+  if (!row) return null;
+  run("DELETE FROM assets WHERE id = ? AND workspace_id = ?", assetId, ws);
+  return row;
 }
 
 // Marks an idea as posted and starts tracking it.

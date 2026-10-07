@@ -4,7 +4,7 @@ import { Link2, MessageCircle, ShoppingBag } from "lucide-react";
 import { createLink } from "@/app/actions";
 import { FunnelChart, Sparkline, type Step } from "@/components/funnel";
 import { Flash } from "@/components/flash";
-import { Badge, Card, SectionTitle, SidebarLink, SidebarSection, Stat, Workspace } from "@/components/workspace";
+import { Badge, Card, EmptyState, SectionTitle, SidebarLink, SidebarSection, Stat, StatStrip, Workspace } from "@/components/workspace";
 import { requireSession } from "@/lib/auth";
 import { ago, compact, money, pct, perThousand, rate, shortDate } from "@/lib/format";
 import {
@@ -89,15 +89,25 @@ function Overview({ ws, posts, href }: { ws: string; posts: PostWithFunnel[]; hr
   const t = getTotals(ws);
   const events = listRecentEvents(ws);
   const best = [...posts].sort((a, b) => b.revenue_cents - a.revenue_cents)[0];
+  if (posts.length === 0) {
+    return (
+      <EmptyState title="Nothing published yet">
+        Open an idea in <Link href="/recreate" className="text-accent-ink underline">Recreate</Link> and use{" "}
+        <b>Mark posted</b> with the post&apos;s URL. Views, ManyChat keywords, link clicks and sales for that post will show up here.
+      </EmptyState>
+    );
+  }
   return (
     <>
       <SectionTitle title="All content, last 30 days" subtitle="Every step from a view to a sale, joined back to the post that caused it." />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Views" value={compact(t.views)} hint={`${compact(t.saves)} saves · ${pct(rate(t.saves, t.views))}`} />
-        <Stat label="New followers" value={compact(t.follows)} hint={`${compact(t.profile_visits)} profile visits`} />
-        <Stat label="Link clicks" value={compact(t.clicks)} hint={`${pct(rate(t.optins, t.clicks))} opt-in rate`} />
-        <Stat label="Revenue" value={money(t.revenue_cents)} hint={`${t.purchases} purchases`} />
-      </div>
+      <StatStrip
+        items={[
+          { label: "Views", value: compact(t.views), hint: `${compact(t.saves)} saves · ${pct(rate(t.saves, t.views))}` },
+          { label: "New followers", value: compact(t.follows), hint: `${compact(t.profile_visits)} profile visits` },
+          { label: "Link clicks", value: compact(t.clicks), hint: `${pct(rate(t.optins, t.clicks))} opt-in rate` },
+          { label: "Revenue", value: money(t.revenue_cents), hint: `${t.purchases} purchases` },
+        ]}
+      />
       <div className="mt-6 grid gap-6 2xl:grid-cols-[1fr_22rem]">
         <Card className="p-5">
           <h3 className="mb-4 text-sm font-semibold">Funnel — all posts</h3>
@@ -171,7 +181,7 @@ function PostsTable({ posts, href }: { posts: PostWithFunnel[]; href: Href }) {
           </thead>
           <tbody>
             {posts.map((p) => (
-              <tr key={p.id} className="border-b border-line last:border-0 hover:bg-background">
+              <tr key={p.id} className="border-b border-line last:border-0 hover:bg-sunken">
                 <td className="p-3">
                   <Link href={href({ post: p.id })} className="font-medium hover:underline">{p.caption}</Link>
                   <div className="text-xs text-muted">
@@ -190,7 +200,7 @@ function PostsTable({ posts, href }: { posts: PostWithFunnel[]; href: Href }) {
   );
 }
 
-const input = "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm";
+const input = "field";
 
 function LinksAndKeywords({ ws, posts }: { ws: string; posts: PostWithFunnel[] }) {
   const links = listLinks(ws);
@@ -265,7 +275,7 @@ function LinksAndKeywords({ ws, posts }: { ws: string; posts: PostWithFunnel[] }
             Label
             <input name="label" placeholder="Blazer guide DM link" className={input} />
           </label>
-          <button className="rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white sm:col-span-2">Create</button>
+          <button className="btn btn-primary sm:col-span-2">Create</button>
         </form>
       </Card>
     </>
@@ -288,11 +298,11 @@ function PostPanel({ ws, post }: { ws: string; post: PostWithFunnel }) {
         <Stat label="$ / 1k views" value={perThousand(post.revenue_cents, post.views)} />
       </div>
       <div>
-        <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Views over time</h4>
+        <h4 className="mb-1 text-xs font-semibold text-muted">Views over time</h4>
         <Sparkline label={`Cumulative views for ${post.caption}`} points={series.map((s) => ({ x: s.captured_at, y: s.views }))} />
       </div>
       <div>
-        <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Funnel</h4>
+        <h4 className="mb-3 text-xs font-semibold text-muted">Funnel</h4>
         <FunnelChart steps={funnelSteps(post)} />
       </div>
       <div className="space-y-1 border-t border-line pt-4 text-xs text-muted">
@@ -319,7 +329,7 @@ function PostPanel({ ws, post }: { ws: string; post: PostWithFunnel }) {
 function EventIcon({ type }: { type: string }) {
   const Icon = type === "purchase" ? ShoppingBag : type === "link_click" ? Link2 : MessageCircle;
   return (
-    <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${type === "purchase" ? "bg-emerald-50 text-good" : "bg-background text-muted"}`}>
+    <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${type === "purchase" ? "bg-good-soft text-good" : "bg-background text-muted"}`}>
       <Icon size={12} />
     </span>
   );
