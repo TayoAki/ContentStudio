@@ -11,9 +11,12 @@ Next.js (App Router, Cache Components on) + Tailwind v4 + `node:sqlite`.
 
 ## Using the app from Claude Code (recreate workflow)
 
-When asked to research a niche or recreate a format, push results into the app rather than leaving them in chat. See README "API" for payloads. Typical loop:
+When asked to research a niche or recreate a format, record results in the app rather than leaving them in chat. Use the `contentstudio` MCP server (`.mcp.json`; tools defined in `src/lib/mcp/server.ts`). Typical loop:
 
-1. Pull trending videos (Virlo MCP or `POST /api/sync/scrapecreators`) → `POST /api/ingest/trending`.
-2. Cluster them into formats → `POST /api/ingest/formats` with `example_urls`.
-3. Write scripts → `POST /api/ingest/ideas` (`created_by: "claude"`, `status: "scripting"`).
-4. Generate media → `POST /api/ingest/assets` linked by `idea_id`.
+1. Find accounts and videos (`search_instagram_reels`, `sync_creators`, or Virlo MCP → `add_trending_posts`), then label each account's trend type and what it sells with `save_creators`.
+2. Cluster them into formats → `save_format` with `example_urls`.
+3. `get_format_brief`, write scripts → `save_ideas`; schedule with `update_idea`.
+4. Generate media → `add_assets` linked by `idea_id`.
+5. After publishing: `mark_posted`, `create_tracked_link`, `record_metrics`; review with `get_format_performance`.
+
+If the MCP server isn't connected, the same writes exist as HTTP endpoints under `/api/ingest/*` (README "API").

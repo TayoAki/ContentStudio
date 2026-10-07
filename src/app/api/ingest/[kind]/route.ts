@@ -1,4 +1,4 @@
-import { checkApiKey } from "@/lib/auth";
+import { authenticateApiRequest } from "@/lib/auth";
 import {
   IngestError,
   addAsset,
@@ -8,27 +8,29 @@ import {
   upsertCreator,
   upsertFormat,
   upsertIdea,
+  upsertNiche,
   upsertTrendingPost,
   type EventInput,
 } from "@/lib/ingest";
 
-// POST /api/ingest/:kind with a JSON object or array of objects.
-// This is the bridge for Claude Code (and Virlo / Scrape Creators jobs) to
-// push research, formats, scripts, generated assets and stats into the app.
-const handlers: Record<string, (item: Record<string, unknown>) => unknown> = {
+// POST /api/ingest/:kind with a JSON object or array of objects, authenticated
+// with the workspace API key. Plain-HTTP equivalent of the MCP write tools,
+// for scripts, cron jobs and automations that don't speak MCP.
+const handlers: Record<string, (ws: string, item: Record<string, unknown>) => unknown> = {
+  niches: upsertNiche,
   creators: upsertCreator,
   trending: upsertTrendingPost,
   formats: upsertFormat,
   ideas: upsertIdea,
   assets: addAsset,
   posts: recordPost,
-  metrics: (item) => (recordMetrics(item), item.post_id),
-  events: (item) => recordEvent(item as unknown as EventInput),
+  metrics: (ws, item) => (recordMetrics(ws, item), item.post_id),
+  events: (ws, item) => recordEvent(ws, { ...(item as unknown as EventInput), source: "api" }),
 };
 
 export async function POST(req: Request, ctx: RouteContext<"/api/ingest/[kind]">) {
-  const denied = checkApiKey(req);
-  if (denied) return denied;
+  const auth = authenticateApiRequest(req);
+  if (auth instanceof Response) return auth;
 
   const { kind } = await ctx.params;
   const handler = handlers[kind];
@@ -44,7 +46,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/ingest/[kind]">
   }
   const items = Array.isArray(body) ? body : [body];
   try {
-    const ids = items.map((item) => handler(item as Record<string, unknown>));
+    const ids = items.map((item) => handler(auth.workspaceId, item as Record<string, unknown>));
     return Response.json({ ok: true, ids });
   } catch (err) {
     if (err instanceof IngestError) return Response.json({ error: err.message }, { status: 400 });

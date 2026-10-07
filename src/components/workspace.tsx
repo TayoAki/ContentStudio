@@ -18,7 +18,7 @@ export function Workspace({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 min-w-0 flex-1">
       <aside className="hidden w-64 shrink-0 overflow-y-auto border-r border-line bg-surface md:block">{sidebar}</aside>
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex shrink-0 border-b border-line bg-surface">

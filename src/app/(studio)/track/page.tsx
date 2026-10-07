@@ -3,7 +3,9 @@ import { connection } from "next/server";
 import { Link2, MessageCircle, ShoppingBag } from "lucide-react";
 import { createLink } from "@/app/actions";
 import { FunnelChart, Sparkline, type Step } from "@/components/funnel";
+import { Flash } from "@/components/flash";
 import { Badge, Card, SectionTitle, SidebarLink, SidebarSection, Stat, Workspace } from "@/components/workspace";
+import { requireSession } from "@/lib/auth";
 import { ago, compact, money, pct, perThousand, rate, shortDate } from "@/lib/format";
 import {
   getPostMetricsSeries,
@@ -40,9 +42,10 @@ const EVENT_LABEL: Record<string, string> = {
 
 export default async function TrackPage({ searchParams }: PageProps<"/track">) {
   await connection();
+  const { workspaceId: ws } = await requireSession();
   const sp = await searchParams;
   const tab: TabKey = TABS.includes(sp.tab as TabKey) ? (sp.tab as TabKey) : "overview";
-  const posts = listPostsWithFunnel();
+  const posts = listPostsWithFunnel(ws);
   const selected = posts.find((p) => p.id === sp.post) ?? posts[0];
   const href = (q: Record<string, string | undefined>) =>
     `/track?${new URLSearchParams(Object.entries({ tab, post: selected?.id, ...q }).filter((e): e is [string, string] => !!e[1]))}`;
@@ -70,20 +73,21 @@ export default async function TrackPage({ searchParams }: PageProps<"/track">) {
           {posts.length === 0 && <p className="text-xs text-muted">Mark an idea as posted to start tracking.</p>}
         </SidebarSection>
       }
-      right={selected ? <PostPanel post={selected} /> : null}
+      right={selected ? <PostPanel ws={ws} post={selected} /> : null}
     >
-      {tab === "overview" && <Overview posts={posts} href={href} />}
+      <Flash />
+      {tab === "overview" && <Overview ws={ws} posts={posts} href={href} />}
       {tab === "posts" && <PostsTable posts={posts} href={href} />}
-      {tab === "links" && <LinksAndKeywords posts={posts} />}
+      {tab === "links" && <LinksAndKeywords ws={ws} posts={posts} />}
     </Workspace>
   );
 }
 
 type Href = (q: Record<string, string | undefined>) => string;
 
-function Overview({ posts, href }: { posts: PostWithFunnel[]; href: Href }) {
-  const t = getTotals();
-  const events = listRecentEvents();
+function Overview({ ws, posts, href }: { ws: string; posts: PostWithFunnel[]; href: Href }) {
+  const t = getTotals(ws);
+  const events = listRecentEvents(ws);
   const best = [...posts].sort((a, b) => b.revenue_cents - a.revenue_cents)[0];
   return (
     <>
@@ -115,7 +119,7 @@ function Overview({ posts, href }: { posts: PostWithFunnel[]; href: Href }) {
                     {e.value_cents > 0 && <span className="font-semibold"> · {money(e.value_cents)}</span>}
                   </div>
                   <div className="truncate text-xs text-muted">
-                    {e.post_caption ?? (e.link_slug === "bio" ? "Link in bio" : "Unattributed")} · {e.source}
+                    {e.post_caption ?? (e.type === "link_click" ? "Link in bio" : "Unattributed")} · {e.source}
                   </div>
                 </div>
                 <span className="shrink-0 text-[11px] text-muted">{ago(e.created_at)}</span>
@@ -188,9 +192,9 @@ function PostsTable({ posts, href }: { posts: PostWithFunnel[]; href: Href }) {
 
 const input = "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm";
 
-function LinksAndKeywords({ posts }: { posts: PostWithFunnel[] }) {
-  const links = listLinks();
-  const keywords = listKeywords();
+function LinksAndKeywords({ ws, posts }: { ws: string; posts: PostWithFunnel[] }) {
+  const links = listLinks(ws);
+  const keywords = listKeywords(ws);
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   return (
     <>
@@ -268,8 +272,8 @@ function LinksAndKeywords({ posts }: { posts: PostWithFunnel[] }) {
   );
 }
 
-function PostPanel({ post }: { post: PostWithFunnel }) {
-  const series = getPostMetricsSeries(post.id);
+function PostPanel({ ws, post }: { ws: string; post: PostWithFunnel }) {
+  const series = getPostMetricsSeries(ws, post.id);
   return (
     <div className="space-y-5">
       <div>

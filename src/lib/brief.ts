@@ -26,12 +26,10 @@ ${ex || "(none yet)"}
 
 TASK:
 1. Write 5 new ideas in this exact format for our audience. Each needs a title, a scroll-stopping hook (<= 10 words), and a beat-by-beat script that matches the structure above. Optimise for SAVES: make it genuinely useful reference content.
-2. Push each idea to ContentStudio:
+2. Save each idea to ContentStudio with the MCP tool save_ideas (format_id "${format.id}"), or without MCP:
    curl -X POST ${appUrl}/api/ingest/ideas \\
      -H "Authorization: Bearer $CONTENTSTUDIO_API_KEY" -H "Content-Type: application/json" \\
      -d '{"format_id":"${format.id}","title":"...","hook":"...","script":"...","status":"scripting","created_by":"claude"}'
-3. When you generate images/videos for an idea, register them:
-   curl -X POST ${appUrl}/api/ingest/assets -H "Authorization: Bearer $CONTENTSTUDIO_API_KEY" \\
-     -H "Content-Type: application/json" -d '{"idea_id":"<idea id>","kind":"image","url":"<file url>","label":"cover"}'
+3. When you generate images/videos for an idea, register them with add_assets (or POST ${appUrl}/api/ingest/assets).
 `;
 }
