@@ -79,6 +79,7 @@ function toBoard(i: Idea): BoardIdea {
     format_name: i.format_name,
     platform: i.platform,
     scheduled_for: i.scheduled_for,
+    planned_for: i.planned_for,
     created_by: i.created_by,
     assets: i.assets,
     thumb: i.cover_url,
@@ -203,7 +204,7 @@ function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
           </p>
           <div className="flex gap-3">
           <div className="w-20 shrink-0">
-            <VideoTile url={idea.source_url ?? undefined} thumbnail={idea.source_thumbnail} hook={idea.source_hook ?? ""} views={idea.source_views ?? 0} likes={idea.source_likes ?? 0} saves={idea.source_saves ?? 0} />
+            <VideoTile url={idea.source_url ?? undefined} thumbnail={idea.source_thumbnail} videoUrl={idea.source_video_url} slides={idea.source_slides} audioUrl={idea.source_audio_url} platform={idea.source_platform ?? undefined} hook={idea.source_hook ?? ""} views={idea.source_views ?? 0} likes={idea.source_likes ?? 0} saves={idea.source_saves ?? 0} />
           </div>
           <div className="min-w-0 text-xs">
             <div className="font-semibold text-muted">Reference video</div>
@@ -257,16 +258,26 @@ function IdeaEditor({ ws, idea }: { ws: string; idea: Idea }) {
             </select>
           </label>
         </div>
-        {idea.status === "ready" || idea.status === "scheduled" ? (
-          <label className="block text-xs text-muted">
-            Publish date
-            <input type="date" name="scheduled_for" defaultValue={idea.scheduled_for?.slice(0, 10) ?? ""} className={input} />
-          </label>
-        ) : idea.status !== "posted" ? (
-          <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">
-            Scheduling unlocks in <b>Ready</b>: finish the script and attach your own media first.
-          </p>
-        ) : null}
+        {idea.status !== "posted" && (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block text-xs text-muted">
+              Planned date
+              <input type="date" name="planned_for" defaultValue={idea.planned_for?.slice(0, 10) ?? ""} className={input} />
+              <span className="mt-0.5 block text-[11px]">Your target. Any stage.</span>
+            </label>
+            {idea.status === "ready" || idea.status === "scheduled" ? (
+              <label className="block text-xs text-muted">
+                Publish date
+                <input type="date" name="scheduled_for" defaultValue={idea.scheduled_for?.slice(0, 10) ?? ""} className={input} />
+                <span className="mt-0.5 block text-[11px]">Puts it on the calendar.</span>
+              </label>
+            ) : (
+              <p className="self-start rounded-lg bg-surface-2 px-3 py-2 text-[11px] text-muted">
+                Publish dates unlock in <b>Ready</b>, once the script and your own media are done.
+              </p>
+            )}
+          </div>
+        )}
         <button className="btn btn-primary btn-block">Save</button>
       </form>
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition, type DragEvent } from "react";
-import { CalendarDays, Paperclip, Plus, X } from "lucide-react";
+import { CalendarDays, Paperclip, Plus, Target, X } from "lucide-react";
 import { quickAddIdeaAction, reorderIdeas } from "@/app/actions";
 
 export type BoardIdea = {
@@ -13,6 +13,7 @@ export type BoardIdea = {
   format_name: string | null;
   platform: string;
   scheduled_for: string | null;
+  planned_for: string | null;
   created_by: string;
   assets: number;
   thumb: string | null; // your own attached media
@@ -228,15 +229,30 @@ function IdeaCard({
               <Paperclip size={11} /> {idea.assets}
             </span>
           )}
-          {idea.scheduled_for && (
-            <span className="flex items-center gap-0.5">
+          {idea.scheduled_for ? (
+            <span className="flex items-center gap-0.5" title="Publish date">
               <CalendarDays size={11} />
-              {new Date(idea.scheduled_for).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              {shortDay(idea.scheduled_for)}
             </span>
-          )}
+          ) : idea.planned_for && idea.status !== "posted" ? (
+            <PlannedDate when={idea.planned_for} />
+          ) : null}
         </span>
       </div>
     </Link>
+  );
+}
+
+const shortDay = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+// A target, not a commitment: muted, and amber once the day has passed.
+function PlannedDate({ when }: { when: string }) {
+  const overdue = new Date(when).getTime() < new Date().setHours(0, 0, 0, 0);
+  return (
+    <span className={`flex items-center gap-0.5 ${overdue ? "font-medium text-warn" : ""}`} title={overdue ? "Planned date has passed" : "Planned date"}>
+      <Target size={11} />
+      {shortDay(when)}
+    </span>
   );
 }
 

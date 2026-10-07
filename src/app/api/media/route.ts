@@ -1,7 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { isProxyableVideo } from "@/lib/thumbs";
 
-// Streams a platform video for inline playback. The CDNs block hotlinking, so
+// Streams a platform video (or a TikTok slideshow's audio track) for inline playback. The CDNs block hotlinking, so
 // the browser plays it through us. Signed-in users only, allowlisted hosts
 // only, Range passed through so the player can seek. Nothing is cached: the
 // links are signed and expire after a few days, after which the tile falls
@@ -20,9 +20,10 @@ export async function GET(req: Request) {
   if (!upstream || !isProxyableVideo(upstream.url)) return new Response("Upstream unavailable", { status: 502 });
   if (!upstream.ok && upstream.status !== 206) return new Response("Video link expired", { status: upstream.status === 403 ? 410 : 502 });
   const type = upstream.headers.get("content-type") ?? "video/mp4";
-  if (!type.startsWith("video/") && type !== "application/octet-stream") return new Response("Not a video", { status: 502 });
+  const playable = type.startsWith("video/") || type.startsWith("audio/");
+  if (!playable && type !== "application/octet-stream") return new Response("Not a video", { status: 502 });
 
-  const headers = new Headers({ "content-type": type.startsWith("video/") ? type : "video/mp4", "cache-control": "private, no-store", "accept-ranges": "bytes" });
+  const headers = new Headers({ "content-type": playable ? type : "video/mp4", "cache-control": "private, no-store", "accept-ranges": "bytes" });
   for (const h of ["content-length", "content-range"]) {
     const v = upstream.headers.get(h);
     if (v) headers.set(h, v);

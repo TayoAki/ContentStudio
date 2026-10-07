@@ -90,6 +90,19 @@ export function updateCreatorMeta(ws: string, creatorId: string, patch: { catego
   );
 }
 
+const MEDIA_TYPES = ["video", "carousel", "photo"];
+
+// Slides arrive as [{image, video?}] from the scraper or as plain image URLs from MCP callers.
+function slidesJson(v: unknown): string | null {
+  if (!Array.isArray(v)) return null;
+  const slides = v
+    .map((s) => (typeof s === "string" ? { image: s } : s && typeof s === "object" ? (s as Record<string, unknown>) : null))
+    .filter((s): s is Record<string, unknown> => !!s && typeof s.image === "string" && s.image.length > 0)
+    .slice(0, 35)
+    .map((s) => (typeof s.video === "string" && s.video ? { image: s.image as string, video: s.video } : { image: s.image as string }));
+  return slides.length > 0 ? JSON.stringify(slides) : null;
+}
+
 export function upsertTrendingPost(ws: string, input: Record<string, unknown>): string {
   const url = required(input.url, "url");
   const creatorId =
@@ -100,17 +113,23 @@ export function upsertTrendingPost(ws: string, input: Record<string, unknown>): 
     | { id: string }
     | undefined;
   const postId = existing?.id ?? id("tp");
+  const slides = slidesJson(input.slides);
+  const mediaType = MEDIA_TYPES.includes(String(input.media_type)) ? String(input.media_type) : slides ? "carousel" : null;
   run(
     `INSERT INTO trending_posts (id, workspace_id, platform, url, creator_id, niche_id, format_id, caption, hook, transcript, thumbnail_url,
-       views, likes, comments, shares, saves, posted_at, source, video_url, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       views, likes, comments, shares, saves, posted_at, source, video_url, media_type, slides, audio_url, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(workspace_id, url) DO UPDATE SET
        views = excluded.views, likes = excluded.likes, comments = excluded.comments,
        shares = excluded.shares, saves = excluded.saves,
        niche_id = COALESCE(excluded.niche_id, niche_id),
        format_id = COALESCE(excluded.format_id, format_id),
        thumbnail_url = COALESCE(excluded.thumbnail_url, thumbnail_url),
-       video_url = COALESCE(excluded.video_url, video_url),
+       -- A slideshow never has a video of its own, so don't keep an old one.
+       video_url = CASE WHEN excluded.media_type = 'carousel' THEN excluded.video_url ELSE COALESCE(excluded.video_url, video_url) END,
+       media_type = COALESCE(excluded.media_type, media_type),
+       slides = COALESCE(excluded.slides, slides),
+       audio_url = COALESCE(excluded.audio_url, audio_url),
        transcript = CASE WHEN excluded.transcript != '' THEN excluded.transcript ELSE transcript END,
        fetched_at = datetime('now')`,
     postId, ws, required(input.platform, "platform"), url, creatorId,
@@ -118,6 +137,7 @@ export function upsertTrendingPost(ws: string, input: Record<string, unknown>): 
     str(input.caption), str(input.hook), str(input.transcript), optStr(input.thumbnail_url),
     num(input.views), num(input.likes), num(input.comments), num(input.shares), num(input.saves),
     optStr(input.posted_at), str(input.source, "manual"), optStr(input.video_url),
+    mediaType, slides, optStr(input.audio_url),
   );
   return postId;
 }
@@ -150,20 +170,52 @@ function asStatus(v: unknown, fallback: IdeaStatus): IdeaStatus {
   return IDEA_STATUSES.includes(v as IdeaStatus) ? (v as IdeaStatus) : fallback;
 }
 
+// A bare day ("2026-10-12") is stored at noon UTC so it lands on the same
+// calendar day in every timezone the app is used in.
+function asDate(v: unknown): string | null {
+  const raw = optStr(v);
+  if (!raw) return null;
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T12:00:00.000Z` : raw;
+  if (Number.isNaN(Date.parse(iso))) throw new IngestError(`Bad date: ${raw}`);
+  return new Date(iso).toISOString();
+}
+
+// The two dates on an idea:
+// - scheduled_for: when it publishes. Only Ready/Scheduled ideas carry one.
+// - planned_for: the date you're aiming for. Any stage can keep one.
+// A publish date given to an idea that isn't Ready yet becomes its planned
+// date, so dates are never silently dropped. Applied on every write path.
+function settleDates(next: Record<string, unknown>, opts: { plannedGiven: boolean; previousScheduled: unknown }) {
+  const status = asStatus(next.status, "idea");
+  let scheduled = asDate(next.scheduled_for);
+  let planned = asDate(next.planned_for);
+  if (EARLY_STAGES.includes(status)) {
+    if (scheduled && !opts.plannedGiven) planned = scheduled;
+    scheduled = null;
+  }
+  const dateChanged = scheduled !== (asDate(opts.previousScheduled) ?? null);
+  let nextStatus: string = status;
+  if (status === "scheduled" && !scheduled) throw new IngestError("Pick a publish date to schedule it.");
+  if (status === "ready" && scheduled && dateChanged) nextStatus = "scheduled";
+  return { status: nextStatus, scheduled_for: scheduled, planned_for: planned };
+}
+
 export function upsertIdea(ws: string, input: Record<string, unknown>): string {
   const ideaId = claimId(ws, "ideas", optStr(input.id), "idea");
+  const previous = db().prepare("SELECT scheduled_for FROM ideas WHERE id = ?").get(ideaId) as { scheduled_for: string | null } | undefined;
+  const dates = settleDates(input, { plannedGiven: input.planned_for !== undefined, previousScheduled: previous?.scheduled_for });
   run(
-    `INSERT INTO ideas (id, workspace_id, format_id, title, hook, script, notes, status, platform, scheduled_for, created_by, source_post_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO ideas (id, workspace_id, format_id, title, hook, script, notes, status, platform, scheduled_for, planned_for, created_by, source_post_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        format_id = excluded.format_id, title = excluded.title,
        hook = excluded.hook, script = excluded.script, notes = excluded.notes,
        status = excluded.status, platform = excluded.platform,
-       scheduled_for = excluded.scheduled_for, source_post_id = excluded.source_post_id,
+       scheduled_for = excluded.scheduled_for, planned_for = excluded.planned_for, source_post_id = excluded.source_post_id,
        updated_at = datetime('now')`,
     ideaId, ws, owned(ws, "formats", optStr(input.format_id)), required(input.title, "title"), str(input.hook),
-    str(input.script), str(input.notes), asStatus(input.status, "idea"), str(input.platform, "instagram"),
-    optStr(input.scheduled_for), str(input.created_by, "claude"),
+    str(input.script), str(input.notes), dates.status, str(input.platform, "instagram"),
+    dates.scheduled_for, dates.planned_for, str(input.created_by, "claude"),
     owned(ws, "trending_posts", optStr(input.source_post_id)),
   );
   return ideaId;
@@ -192,9 +244,19 @@ export function saveVideoAsIdea(ws: string, postId: string, createdBy = "user"):
     Number(v.saves) > 0 && `${Number(v.saves).toLocaleString()} saves`,
     Number(v.comments) > 0 && `${Number(v.comments).toLocaleString()} comments`,
   ].filter(Boolean).join(" · ");
+  const slideCount = (() => {
+    try {
+      return v.slides ? (JSON.parse(String(v.slides)) as unknown[]).length : 0;
+    } catch {
+      return 0;
+    }
+  })();
+  const kind = slideCount > 0 ? (v.platform === "tiktok" ? `${slideCount}-slide slideshow` : `${slideCount}-slide carousel`) : "video";
   const notes = [
-    `REFERENCE ONLY: don't repost this. Recreate the format with your own script and new media.`,
-    `Reference video by ${handle}: ${v.url}`,
+    slideCount > 0
+      ? `REFERENCE ONLY: don't repost these slides. Recreate the format with your own copy and new images, slide for slide.`
+      : `REFERENCE ONLY: don't repost this. Recreate the format with your own script and new media.`,
+    `Reference ${kind} by ${handle}: ${v.url}`,
     statsLine && `Stats when saved: ${statsLine}${Number(v.followers) > 0 ? ` (account: ${Number(v.followers).toLocaleString()} followers)` : ""}`,
     v.format_name && `Format: ${v.format_name}`,
     hook && `Original hook: ${hook}`,
@@ -220,23 +282,19 @@ export function saveVideoAsIdea(ws: string, postId: string, createdBy = "user"):
 const EARLY_STAGES = ["idea", "scripting", "producing"];
 export const NOT_READY_TO_SCHEDULE = "Only ideas in Ready can be scheduled. Finish it and move it to Ready first.";
 
-// Merge-update: only the fields provided change.
+// Merge-update: only the fields provided change. Date rules live in settleDates.
 export function updateIdea(ws: string, ideaId: string, patch: Record<string, unknown>): string {
   const existing = db().prepare("SELECT * FROM ideas WHERE id = ? AND workspace_id = ?").get(ideaId, ws) as
     | Record<string, unknown>
     | undefined;
   if (!existing) throw new IngestError(`Idea "${ideaId}" not found`);
   const defined = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  // Moving back to an earlier stage turns the publish date into the planned date,
+  // unless a planned date was given explicitly.
+  const plannedGiven = "planned_for" in defined;
   const next: Record<string, unknown> = { ...existing, ...defined, id: ideaId };
-  const status = String(next.status);
-  const dateChanged = (next.scheduled_for ?? null) !== (existing.scheduled_for ?? null);
-  if (EARLY_STAGES.includes(status)) {
-    if (dateChanged && next.scheduled_for) throw new IngestError(NOT_READY_TO_SCHEDULE);
-    next.scheduled_for = null;
-  }
-  if (status === "scheduled" && !next.scheduled_for) throw new IngestError("Pick a publish date to schedule it.");
-  if (status === "ready" && next.scheduled_for && dateChanged) next.status = "scheduled";
-  return upsertIdea(ws, next);
+  const settled = settleDates(next, { plannedGiven: plannedGiven && !!next.planned_for, previousScheduled: existing.scheduled_for });
+  return upsertIdea(ws, { ...next, ...settled, planned_for: settled.planned_for });
 }
 
 export function addAsset(ws: string, input: Record<string, unknown>): string {
@@ -265,12 +323,14 @@ export function reorderColumn(ws: string, status: string, ids: string[]) {
       if (status === "posted" && row.status !== "posted") {
         throw new IngestError("Use Mark posted (with the post's URL) so it can be tracked.");
       }
-      // Moving back to an earlier stage drops the publish date.
+      // Moving back to an earlier stage keeps the publish date as the planned date.
+      // (SQLite evaluates every SET expression against the row before the update.)
       conn
         .prepare(
           `UPDATE ideas SET status = ?, position = ?, updated_at = datetime('now'),
-             scheduled_for = CASE WHEN ? THEN NULL ELSE scheduled_for END
-           WHERE id = ? AND workspace_id = ?`,
+             planned_for = CASE WHEN ?3 AND scheduled_for IS NOT NULL THEN scheduled_for ELSE planned_for END,
+             scheduled_for = CASE WHEN ?3 THEN NULL ELSE scheduled_for END
+           WHERE id = ?4 AND workspace_id = ?5`,
         )
         .run(status, i, EARLY_STAGES.includes(status) ? 1 : 0, ideaId, ws);
     });
@@ -295,6 +355,19 @@ export function scheduleIdea(ws: string, ideaId: string, when: string | null) {
   run(
     "UPDATE ideas SET scheduled_for = ?, status = ?, updated_at = datetime('now') WHERE id = ? AND workspace_id = ?",
     when ? new Date(when).toISOString() : null, status, ideaId, ws,
+  );
+}
+
+// Calendar: set or clear the planned date. Any stage except Posted can have one.
+export function planIdea(ws: string, ideaId: string, when: string | null) {
+  const idea = db().prepare("SELECT status FROM ideas WHERE id = ? AND workspace_id = ?").get(ideaId, ws) as
+    | { status: string }
+    | undefined;
+  if (!idea) throw new IngestError(`Idea "${ideaId}" not found`);
+  if (idea.status === "posted") throw new IngestError("It's already posted.");
+  run(
+    "UPDATE ideas SET planned_for = ?, updated_at = datetime('now') WHERE id = ? AND workspace_id = ?",
+    asDate(when), ideaId, ws,
   );
 }
 

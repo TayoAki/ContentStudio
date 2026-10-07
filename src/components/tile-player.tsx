@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Play } from "lucide-react";
 
-const PLAY_EVENT = "cs:play";
+export const PLAY_EVENT = "cs:play";
 
 // Click-to-play for a video tile. The poster and overlays render as children
 // until playback starts; only one tile plays at a time.

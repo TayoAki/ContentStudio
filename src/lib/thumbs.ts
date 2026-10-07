@@ -56,7 +56,12 @@ export async function getThumb(url: string): Promise<{ body: Buffer; type: strin
   return { body, type };
 }
 
-// Called after a sync so thumbnails are saved before the CDN links expire.
+// Called after a sync so thumbnails (and carousel slides) are saved before the
+// CDN links expire. A few at a time: a synced profile can hold 100+ slides.
 export function warmThumbs(urls: (string | null | undefined)[]) {
-  void Promise.allSettled(urls.filter((u): u is string => !!u && isProxyable(u)).map(getThumb));
+  const queue = [...new Set(urls.filter((u): u is string => !!u && isProxyable(u)))];
+  const worker = async () => {
+    for (let u = queue.shift(); u; u = queue.shift()) await getThumb(u).catch(() => null);
+  };
+  void Promise.all(Array.from({ length: 6 }, worker));
 }

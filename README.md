@@ -81,10 +81,10 @@ All ingest endpoints take a JSON object or array, with `Authorization: Bearer <w
 
 | Endpoint | Body (key fields) |
 |---|---|
-| `POST /api/ingest/trending` | `url, platform, niche_id, format_id?, hook, caption, transcript?, views, likes, comments, shares, saves, posted_at, source, creator:{handle, platform, followers, followers_30d_ago, first_post_at}` |
+| `POST /api/ingest/trending` | `url, platform, niche_id, format_id?, hook, caption, transcript?, views, likes, comments, shares, saves, posted_at, source, video_url?, media_type? (video/carousel/photo), slides?[] (image URLs or {image, video}), audio_url?, creator:{handle, platform, followers, followers_30d_ago, first_post_at}` |
 | `POST /api/ingest/creators` | `platform, handle, followers, followers_30d_ago, first_post_at, niche_id` |
 | `POST /api/ingest/formats` | `name, niche_id, summary, structure[], why_it_works, status, example_urls[]` |
-| `POST /api/ingest/ideas` | `title, format_id, hook, script, notes, status, platform, scheduled_for` (send `id` to update) |
+| `POST /api/ingest/ideas` | `title, format_id, hook, script, notes, status, platform, planned_for, scheduled_for` (send `id` to update). `planned_for` is a target date any stage can keep; `scheduled_for` is the publish date and only sticks on Ready/Scheduled ideas (on earlier stages it's saved as `planned_for`). |
 | `POST /api/ingest/assets` | `idea_id, kind (image/video/carousel/caption), url, label` |
 | `POST /api/ingest/posts` | `idea_id, platform, url, caption, published_at` |
 | `POST /api/ingest/metrics` | `post_id, views, likes, comments, shares, saves, profile_visits, follows` |

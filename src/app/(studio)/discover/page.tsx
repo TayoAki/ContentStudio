@@ -63,11 +63,14 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
   const formats = nicheId ? listFormats(ws, nicheId) : [];
   const videos = nicheId ? listTrendingPosts(ws, { nicheId }) : [];
   const saved = savedVideoIdeas(ws);
+  const filter = readFilter(sp);
+  const counts = countKinds(videos);
+  const shownVideos = applyFilter(videos, filter, saved);
   const account = accounts.find((a) => a.id === sp.account);
   const format = formats.find((f) => f.id === sp.format) ?? (tab === "formats" ? formats[0] : undefined);
   const href = (q: Record<string, string | undefined>) =>
     `/discover?${new URLSearchParams(
-      Object.entries({ niche: nicheId, tab, account: account?.id, format: format?.id, ...q }).filter(
+      Object.entries({ niche: nicheId, tab, account: account?.id, format: format?.id, ...(tab === "videos" ? filterParams(filter) : {}), ...q }).filter(
         (e): e is [string, string] => !!e[1],
       ),
     )}`;
@@ -221,12 +224,21 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
 
       {tab === "videos" && nicheId && (
         <>
-          <SectionTitle title="Top videos" subtitle="Every stored video in this niche, by views. Save the ones you want to replicate straight into Ideas. — means the platform doesn’t report that stat (Instagram hides saves and shares, and views on photo posts)." />
-          {videos.length === 0 && <EmptyHint />}
+          <SectionTitle title="Top videos" subtitle="Every stored post in this niche, videos, carousels and slideshows. Filter by format and platform, then save the ones you want to replicate straight into Ideas. — means the platform doesn’t report that stat (Instagram hides saves and shares, and views on photo posts)." />
+          {videos.length === 0 ? (
+            <EmptyHint />
+          ) : (
+            <VideoFilters filter={filter} counts={counts} href={href} shown={shownVideos.length} total={videos.length} />
+          )}
+          {videos.length > 0 && shownVideos.length === 0 && (
+            <p className="rounded-lg border border-dashed border-line-strong px-3 py-6 text-center text-sm text-muted">
+              Nothing matches these filters. <Link href={href({ kind: undefined, platform: undefined, show: undefined, sort: undefined })} className="text-accent-ink underline">Clear filters</Link>
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-            {[...videos].sort(byReach).map((v) => (
+            {shownVideos.map((v) => (
               <div key={v.id}>
-                <VideoTile url={v.url} thumbnail={v.thumbnail_url} videoUrl={v.video_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={v.platform}
+                <VideoTile url={v.url} thumbnail={v.thumbnail_url} videoUrl={v.video_url} slides={v.slides} audioUrl={v.audio_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={v.platform}
                   label={v.reach_multiple >= 1 ? `${v.reach_multiple.toFixed(1)}x` : undefined} />
                 <VideoStats video={v} ideaId={saved.get(v.id)} />
               </div>
@@ -240,13 +252,146 @@ export default async function DiscoverPage({ searchParams }: PageProps<"/discove
 
 type Saved = Map<string, string>;
 
+// ---------- Top posts filters (all in the URL, so a filtered view can be shared) ----------
+
+const KINDS = [
+  { key: "all", label: "All" },
+  { key: "video", label: "Videos" },
+  { key: "carousel", label: "Carousels & slideshows" },
+  { key: "photo", label: "Photos" },
+] as const;
+const PLATFORMS = [
+  { key: "all", label: "All platforms" },
+  { key: "instagram", label: "Instagram" },
+  { key: "tiktok", label: "TikTok" },
+] as const;
+const SORTS = [
+  { key: "views", label: "Most views" },
+  { key: "reach", label: "Reach vs followers" },
+  { key: "saves", label: "Most saves" },
+  { key: "engagement", label: "Most engagement" },
+  { key: "newest", label: "Newest" },
+] as const;
+const SHOWS = [
+  { key: "all", label: "All" },
+  { key: "unsaved", label: "Not saved yet" },
+  { key: "saved", label: "Saved to Ideas" },
+] as const;
+
+type Filter = {
+  kind: (typeof KINDS)[number]["key"];
+  platform: (typeof PLATFORMS)[number]["key"];
+  sort: (typeof SORTS)[number]["key"];
+  show: (typeof SHOWS)[number]["key"];
+};
+
+function pick<T extends readonly { key: string }[]>(options: T, value: unknown): T[number]["key"] {
+  return (options.find((o) => o.key === value) ?? options[0]).key;
+}
+
+function readFilter(sp: Record<string, string | string[] | undefined>): Filter {
+  return { kind: pick(KINDS, sp.kind), platform: pick(PLATFORMS, sp.platform), sort: pick(SORTS, sp.sort), show: pick(SHOWS, sp.show) };
+}
+
+// Only non-default values go in the URL.
+function filterParams(f: Filter): Record<string, string | undefined> {
+  return {
+    kind: f.kind === "all" ? undefined : f.kind,
+    platform: f.platform === "all" ? undefined : f.platform,
+    sort: f.sort === "views" ? undefined : f.sort,
+    show: f.show === "all" ? undefined : f.show,
+  };
+}
+
+// Posts synced before slides were stored have no media_type: a video URL or a
+// view count means video, anything else is a photo post.
+const kindOf = (v: TrendingPost) => v.media_type ?? (v.video_url || v.views > 0 ? "video" : "photo");
+
+function countKinds(videos: TrendingPost[]): Record<string, number> {
+  const counts: Record<string, number> = { all: videos.length };
+  for (const v of videos) counts[kindOf(v)] = (counts[kindOf(v)] ?? 0) + 1;
+  return counts;
+}
+
+const engagementOf = (v: TrendingPost) => v.likes + v.comments + v.shares + v.saves;
+const SORT_FNS: Record<Filter["sort"], (a: TrendingPost, b: TrendingPost) => number> = {
+  views: byReach,
+  reach: (a, b) => b.reach_multiple - a.reach_multiple || byReach(a, b),
+  saves: (a, b) => b.saves - a.saves || byReach(a, b),
+  engagement: (a, b) => engagementOf(b) - engagementOf(a),
+  newest: (a, b) => (b.posted_at ?? "").localeCompare(a.posted_at ?? ""),
+};
+
+function applyFilter(videos: TrendingPost[], f: Filter, saved: Saved): TrendingPost[] {
+  return videos
+    .filter((v) => f.kind === "all" || kindOf(v) === f.kind)
+    .filter((v) => f.platform === "all" || v.platform === f.platform)
+    .filter((v) => f.show === "all" || (f.show === "saved") === saved.has(v.id))
+    .sort(SORT_FNS[f.sort]);
+}
+
+function VideoFilters({ filter, counts, href, shown, total }: {
+  filter: Filter;
+  counts: Record<string, number>;
+  href: (q: Record<string, string | undefined>) => string;
+  shown: number;
+  total: number;
+}) {
+  const chip = (active: boolean) =>
+    `whitespace-nowrap rounded-full border px-2.5 py-1 text-xs transition-colors ${
+      active ? "border-accent bg-accent text-accent-fg" : "border-line-strong text-muted hover:border-foreground/40 hover:text-foreground"
+    }`;
+  const defaults = filterParams({ kind: "all", platform: "all", sort: "views", show: "all" });
+  return (
+    <div className="mb-4 space-y-2 rounded-xl border border-line bg-surface p-3">
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Post type">
+        {KINDS.filter((k) => k.key === "all" || filter.kind === k.key || (counts[k.key] ?? 0) > 0).map((k) => (
+          <Link key={k.key} href={href({ kind: k.key === "all" ? undefined : k.key })} aria-current={filter.kind === k.key ? "true" : undefined} className={chip(filter.kind === k.key)}>
+            {k.label} <span className="tabular-nums opacity-70">{counts[k.key] ?? 0}</span>
+          </Link>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Platform and saved">
+        {PLATFORMS.map((p) => (
+          <Link key={p.key} href={href({ platform: p.key === "all" ? undefined : p.key })} aria-current={filter.platform === p.key ? "true" : undefined} className={chip(filter.platform === p.key)}>
+            {p.label}
+          </Link>
+        ))}
+        <span className="mx-1 h-4 w-px bg-line-strong" aria-hidden />
+        {SHOWS.map((o) => (
+          <Link key={o.key} href={href({ show: o.key === "all" ? undefined : o.key })} aria-current={filter.show === o.key ? "true" : undefined} className={chip(filter.show === o.key)}>
+            {o.key === "all" ? "Saved or not" : o.label}
+          </Link>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Sort">
+        <span className="mr-1 text-xs text-muted">Sort</span>
+        {SORTS.map((o) => (
+          <Link key={o.key} href={href({ sort: o.key === "views" ? undefined : o.key })} aria-current={filter.sort === o.key ? "true" : undefined} className={chip(filter.sort === o.key)}>
+            {o.label}
+          </Link>
+        ))}
+        <span className="ml-auto text-xs tabular-nums text-muted">
+          {shown === total ? `${total} posts` : `${shown} of ${total} posts`}
+          {shown !== total && (
+            <>
+              {" · "}
+              <Link href={href(defaults)} className="text-accent-ink underline">Clear</Link>
+            </>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // A video tile with a one-click "Save to Ideas" button in the corner.
 function SavableTile({ video: v, saved, size, platform, label }: {
   video: TrendingPost; saved: Saved; size?: "sm" | "md"; platform?: string; label?: string;
 }) {
   return (
     <div className="relative shrink-0">
-      <VideoTile size={size} url={v.url} thumbnail={v.thumbnail_url} videoUrl={v.video_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={platform} label={label} />
+      <VideoTile size={size} url={v.url} thumbnail={v.thumbnail_url} videoUrl={v.video_url} slides={v.slides} audioUrl={v.audio_url} hook={v.hook} views={v.views} likes={v.likes} saves={v.saves} platform={platform} label={label} />
       <div className="absolute right-1.5 top-1.5 z-20">
         <SaveIdeaButton postId={v.id} ideaId={saved.get(v.id)} compact />
       </div>

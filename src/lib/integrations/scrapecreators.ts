@@ -21,6 +21,11 @@ async function call<T>(ws: string, path: string, params: Record<string, string>)
   return (await res.json()) as T;
 }
 
+// One frame of a carousel (Instagram) or photo slideshow (TikTok). Carousel
+// items can themselves be videos.
+export type Slide = { image: string; video?: string | null };
+export type MediaType = "video" | "carousel" | "photo";
+
 export type ScrapedPost = {
   platform: "tiktok" | "instagram";
   url: string;
@@ -28,6 +33,9 @@ export type ScrapedPost = {
   hook: string;
   thumbnail_url: string | null;
   video_url: string | null;
+  media_type: MediaType;
+  slides: Slide[] | null;
+  audio_url: string | null; // background track of a TikTok slideshow
   views: number;
   likes: number;
   comments: number;
@@ -49,18 +57,28 @@ type Aweme = {
   create_time_utc?: string;
   statistics?: { play_count?: number; digg_count?: number; comment_count?: number; share_count?: number; collect_count?: number };
   video?: { cover?: { url_list?: string[] }; play_addr?: { url_list?: string[] } };
+  // Photo-mode posts. Their video.play_addr is the music track, not a video.
+  image_post_info?: { images?: { display_image?: { url_list?: string[] }; thumbnail?: { url_list?: string[] } }[] };
   author?: { unique_id?: string; nickname?: string; follower_count?: number; signature?: string; avatar_thumb?: { url_list?: string[] } };
 };
 
 function fromAweme(v: Aweme, fallbackHandle: string): ScrapedPost {
   const handle = v.author?.unique_id ?? fallbackHandle;
+  const slides = (v.image_post_info?.images ?? [])
+    .map((i) => ({ image: i.display_image?.url_list?.[0] ?? i.thumbnail?.url_list?.[0] ?? "" }))
+    .filter((i) => i.image);
+  const isSlideshow = slides.length > 0;
+  const playAddr = v.video?.play_addr?.url_list?.[0] ?? null;
   return {
     platform: "tiktok",
     url: v.url ?? `https://www.tiktok.com/@${handle}/video/${v.aweme_id}`,
     caption: v.desc ?? "",
     hook: firstLine(v.desc ?? ""),
-    thumbnail_url: v.video?.cover?.url_list?.[0] ?? null,
-    video_url: v.video?.play_addr?.url_list?.[0] ?? null,
+    thumbnail_url: v.video?.cover?.url_list?.[0] ?? slides[0]?.image ?? null,
+    video_url: isSlideshow ? null : playAddr,
+    media_type: isSlideshow ? "carousel" : "video",
+    slides: isSlideshow ? slides : null,
+    audio_url: isSlideshow ? playAddr : null,
     views: v.statistics?.play_count ?? 0,
     likes: v.statistics?.digg_count ?? 0,
     comments: v.statistics?.comment_count ?? 0,
@@ -88,6 +106,7 @@ export async function fetchTikTokProfileVideos(ws: string, handle: string): Prom
 // ---------- Instagram ----------
 
 type IgNode = {
+  __typename?: string; // GraphImage | GraphVideo | GraphSidecar (XDT-prefixed on newer responses)
   shortcode?: string;
   url?: string;
   is_video?: boolean;
@@ -99,6 +118,7 @@ type IgNode = {
   edge_media_preview_like?: { count?: number };
   edge_media_to_comment?: { count?: number };
   edge_media_to_caption?: { edges?: { node?: { text?: string } }[] };
+  edge_sidecar_to_children?: { edges?: { node: { display_url?: string; is_video?: boolean; video_url?: string | null } }[] };
 };
 
 export async function fetchInstagramProfile(ws: string, handle: string): Promise<{ creator: ScrapedPost["creator"] & Record<string, unknown>; posts: ScrapedPost[] }> {
@@ -132,6 +152,10 @@ export async function fetchInstagramProfile(ws: string, handle: string): Promise
   };
   const posts = (user?.edge_owner_to_timeline_media?.edges ?? []).map(({ node }): ScrapedPost => {
     const caption = node.edge_media_to_caption?.edges?.[0]?.node?.text ?? "";
+    const slides = (node.edge_sidecar_to_children?.edges ?? [])
+      .map(({ node: c }) => ({ image: c.display_url ?? "", video: c.is_video ? c.video_url ?? null : null }))
+      .filter((c) => c.image);
+    const isCarousel = slides.length > 0 || /Sidecar$/.test(node.__typename ?? "");
     return {
       platform: "instagram",
       url: node.url ?? `https://www.instagram.com/p/${node.shortcode}/`,
@@ -139,6 +163,9 @@ export async function fetchInstagramProfile(ws: string, handle: string): Promise
       hook: firstLine(caption),
       thumbnail_url: node.thumbnail_src ?? node.display_url ?? null,
       video_url: node.is_video ? node.video_url ?? null : null,
+      media_type: isCarousel ? "carousel" : node.is_video ? "video" : "photo",
+      slides: slides.length > 0 ? slides : null,
+      audio_url: null,
       views: node.video_view_count ?? 0,
       likes: node.edge_media_preview_like?.count ?? 0,
       comments: node.edge_media_to_comment?.count ?? 0,
@@ -176,6 +203,9 @@ export async function searchInstagramReels(ws: string, query: string): Promise<S
     hook: firstLine(r.caption ?? ""),
     thumbnail_url: r.thumbnail_src ?? r.display_url ?? null,
     video_url: r.video_url ?? null,
+    media_type: "video" as const,
+    slides: null,
+    audio_url: null,
     views: r.video_view_count ?? 0,
     likes: r.like_count ?? 0,
     comments: r.comment_count ?? 0,
