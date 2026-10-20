@@ -1,0 +1,189 @@
+{
+  "_source": "Content plan tab of the Microsoft Fabric Field Guide (Oct 21-27). Layout: docs/reels/REEL_SPEC.md.",
+  "reels": [
+    {
+      "id": "01-wed-am-data-engineer-trivia",
+      "post_at": "2026-10-21T09:00:00-04:00",
+      "format": "quiz",
+      "hook": "Data engineers should get all 5. Did you get the last one?",
+      "caption": "Data Engineer Trivia | Did you get the last one? #dataengineering #microsoftfabric #databricks",
+      "questions": [
+        { "q": "What does ETL stand for?", "a": "Extract, Transform, Load" },
+        { "q": "What file format sits under every Delta Lake table?", "a": "Parquet" },
+        { "q": "In a medallion architecture, which layer holds the raw data?", "a": "Bronze" },
+        { "q": "In ACID, what does the \"I\" stand for?", "a": "Isolation" },
+        { "q": "How many OneLakes can one Microsoft Fabric tenant have?", "a": "One: you can't create a second", "short": "Just one" }
+      ]
+    },
+    {
+      "id": "02-wed-pm-sql-puzzle-1",
+      "post_at": "2026-10-21T18:00:00-04:00",
+      "format": "sql",
+      "hook": ["Interviewer: This table has 1,000 rows... but with_email says 847.", "Why might that happen?"],
+      "code": "SELECT COUNT(*) AS all_rows,\n       COUNT(email) AS with_email\nFROM customers;",
+      "trick": [{ "line": 2, "text": "COUNT(email)" }],
+      "hint": "Pay attention to what COUNT counts....",
+      "caption": "SQL Puzzle #1: the table has 1,000 rows, so why 847? Comment your answer 👇 #sql #sqlinterview #dataengineering",
+      "answer": "COUNT(email) skips NULLs, so 153 customers have no email. COUNT(*) counts every row."
+    },
+    {
+      "id": "03-thu-am-databricks-vs-fabric-8of8",
+      "post_at": "2026-10-22T09:00:00-04:00",
+      "format": "quiz",
+      "hook": "Most data engineers can't answer ONE of these questions",
+      "caption": "8/8 is CRAZY 🤯 Comment your score #databricks #microsoftfabric #dataengineer",
+      "questions": [
+        { "q": "Which company created Delta Lake?", "a": "Databricks" },
+        { "q": "What is Databricks' governance catalog called?", "a": "Unity Catalog" },
+        { "q": "Fabric compute is sold in CUs. What is a CU?", "a": "A Capacity Unit", "short": "Capacity Unit" },
+        { "q": "Which Power BI mode reads Delta tables straight from OneLake, with no import?", "a": "Direct Lake" },
+        { "q": "What is Databricks' vectorized query engine called?", "a": "Photon" },
+        { "q": "Which query language runs Fabric's Eventhouse?", "a": "KQL (Kusto Query Language)", "short": "KQL" },
+        { "q": "Which open-source tool for tracking ML experiments did Databricks create?", "a": "MLflow" },
+        { "q": "What's the smallest Fabric SKU where Free-licensed users can view Power BI reports?", "a": "F64" }
+      ]
+    },
+    {
+      "id": "04-thu-pm-sql-puzzle-2",
+      "post_at": "2026-10-22T18:00:00-04:00",
+      "format": "sql",
+      "hook": ["Interviewer: This count skips rows that aren't active...", "Why might that happen?"],
+      "code": "SELECT COUNT(*)\nFROM accounts\nWHERE status != 'active';",
+      "trick": [{ "line": 3, "text": "!=" }],
+      "hint": "Pay attention to the WHERE....",
+      "caption": "SQL Puzzle #2: why does != skip rows? Comment your answer 👇 #sql #dataanalyst",
+      "answer": "Rows where status is NULL disappear: NULL != 'active' is unknown, not true. Fix: WHERE status != 'active' OR status IS NULL."
+    },
+    {
+      "id": "05-fri-am-sql-trivia",
+      "post_at": "2026-10-23T09:00:00-04:00",
+      "format": "quiz",
+      "hook": "SQL Trivia: did you get the last one?",
+      "caption": "SQL Trivia | Did you get the last one? #sql #dataanalyst #dataengineering",
+      "questions": [
+        { "q": "Which clause filters rows after GROUP BY?", "a": "HAVING" },
+        { "q": "ORDER BY sorts in which direction by default?", "a": "Ascending" },
+        { "q": "COUNT(*) or COUNT(column): which one skips NULLs?", "a": "COUNT(column)" },
+        { "q": "Which join keeps every row from both tables?", "a": "FULL OUTER JOIN" },
+        { "q": "What does NULL = NULL return?", "a": "NULL (unknown), not TRUE", "short": "NULL, not TRUE" }
+      ]
+    },
+    {
+      "id": "06-fri-pm-sql-puzzle-3",
+      "post_at": "2026-10-23T18:00:00-04:00",
+      "format": "sql",
+      "hook": ["Interviewer: My LEFT JOIN lost the customers with no orders...", "Why might that happen?"],
+      "code": "SELECT c.name, o.order_id\nFROM customers c\nLEFT JOIN orders o\n  ON o.customer_id = c.id\nWHERE o.status = 'shipped';",
+      "trick": [{ "line": 5, "text": "WHERE" }],
+      "hint": "Pay attention to the WHERE....",
+      "caption": "SQL Puzzle #3: my LEFT JOIN lost rows. Why? Comment your answer 👇 #sql #sqlinterview",
+      "answer": "Customers with no orders have a NULL status, so WHERE removes them and the LEFT JOIN acts like an inner join. Fix: move the filter into ON."
+    },
+    {
+      "id": "07-sat-am-data-acronyms-8of8",
+      "post_at": "2026-10-24T09:00:00-04:00",
+      "format": "quiz",
+      "hook": "Every data engineer should be able to answer all of these",
+      "caption": "8/8 is STANDARD for data engineers. Comment your score #data #sql #powerbi",
+      "questions": [
+        { "q": "What does SQL stand for?", "a": "Structured Query Language" },
+        { "q": "What does CDC stand for?", "a": "Change Data Capture" },
+        { "q": "What does OLTP stand for?", "a": "Online Transaction Processing" },
+        { "q": "What does DAX stand for?", "a": "Data Analysis Expressions" },
+        { "q": "What does KQL stand for?", "a": "Kusto Query Language" },
+        { "q": "What does SCD stand for?", "a": "Slowly Changing Dimension" },
+        { "q": "What does RLS stand for?", "a": "Row-Level Security" },
+        { "q": "What does DLT stand for?", "a": "Delta Live Tables" }
+      ]
+    },
+    {
+      "id": "08-sat-pm-sql-puzzle-4",
+      "post_at": "2026-10-24T18:00:00-04:00",
+      "format": "sql",
+      "hook": ["Interviewer: 500 orders went in. 1,200 rows came out...", "Why might that happen?"],
+      "code": "SELECT o.order_id, o.amount,\n       p.promo_code\nFROM orders o\nJOIN promotions p\n  ON p.customer_id = o.customer_id;",
+      "trick": [{ "line": 5, "text": "p.customer_id = o.customer_id" }],
+      "hint": "Pay attention to the join key....",
+      "caption": "SQL Puzzle #4: 500 orders in, 1,200 rows out. Why? 👇 #sql #dataengineering",
+      "answer": "Customers with several promotions match several rows, so their orders are duplicated (join fan-out). Fix: join to one row per customer."
+    },
+    {
+      "id": "09-sun-am-power-bi-trivia",
+      "post_at": "2026-10-25T09:00:00-04:00",
+      "format": "quiz",
+      "hook": "Power BI Analyst Trivia: did you get the last one?",
+      "caption": "Power BI Analyst Trivia | Did you get the last one? #powerbi #dataanalyst #microsoftfabric",
+      "questions": [
+        { "q": "What is Power BI's formula language?", "a": "DAX" },
+        { "q": "Which Power BI tool cleans and shapes data?", "a": "Power Query" },
+        { "q": "What language does Power Query write under the hood?", "a": "M" },
+        { "q": "Besides Direct Lake, what are Power BI's two classic storage modes?", "a": "Import and DirectQuery" },
+        { "q": "Below which Fabric SKU does every report viewer need a Pro license?", "a": "F64" }
+      ]
+    },
+    {
+      "id": "10-sun-pm-sql-puzzle-5",
+      "post_at": "2026-10-25T18:00:00-04:00",
+      "format": "sql",
+      "hook": ["Interviewer: This returns zero rows, but some customers never ordered...", "Why might that happen?"],
+      "code": "SELECT id\nFROM customers\nWHERE id NOT IN (\n  SELECT customer_id\n  FROM orders\n);",
+      "trick": [{ "line": 3, "text": "NOT IN" }],
+      "hint": "Pay attention to the sub-query....",
+      "caption": "SQL Puzzle #5: why does NOT IN return zero rows? 👇 #sql #sqlinterview",
+      "answer": "If any orders.customer_id is NULL, NOT IN returns nothing. Fix: NOT EXISTS."
+    },
+    {
+      "id": "11-mon-am-fabric-8of8",
+      "post_at": "2026-10-26T09:00:00-04:00",
+      "format": "quiz",
+      "hook": "Getting even 1 of these 8 right is good",
+      "caption": "1/8 is good! Comment your score #microsoftfabric #powerbi #dataengineering",
+      "questions": [
+        { "q": "What format does OneLake store tables in?", "a": "Delta Parquet" },
+        { "q": "Which Fabric item gives you T-SQL with multi-table transactions?", "a": "Warehouse" },
+        { "q": "Which feature replicates a database into OneLake in near real time?", "a": "Mirroring" },
+        { "q": "What do you call a pointer to data in another location, with no copy?", "a": "A shortcut", "short": "Shortcut" },
+        { "q": "Which Fabric tool fires alerts and actions on data with no code?", "a": "Activator" },
+        { "q": "How long is a Fabric trial?", "a": "60 days" },
+        { "q": "One capacity unit equals how many Spark vCores?", "a": "2" },
+        { "q": "How much free mirroring storage comes with each CU?", "a": "1 TB" }
+      ]
+    },
+    {
+      "id": "12-mon-pm-sql-puzzle-6",
+      "post_at": "2026-10-26T18:00:00-04:00",
+      "format": "sql",
+      "hook": ["Interviewer: AVG says 80. The real average is 64...", "Why might that happen?"],
+      "code": "SELECT AVG(score)\nFROM results;\n-- scores: 80, 80, 80, 80, NULL",
+      "trick": [{ "line": 1, "text": "AVG(score)" }],
+      "hint": "Pay attention to the last score....",
+      "caption": "SQL Puzzle #6: AVG says 80, the real average is 64. Why? 👇 #sql #dataanalyst",
+      "answer": "AVG ignores NULLs, so it averages 4 scores. If NULL means a missed test worth 0, the real average is 320 / 5 = 64. Fix: AVG(COALESCE(score, 0))."
+    },
+    {
+      "id": "13-tue-am-databricks-trivia",
+      "post_at": "2026-10-27T09:00:00-04:00",
+      "format": "quiz",
+      "hook": "Databricks Trivia: did you get the last one?",
+      "caption": "Databricks Trivia | Did you get the last one? #databricks #spark #dataengineering",
+      "questions": [
+        { "q": "What is Databricks' open-source table format?", "a": "Delta Lake" },
+        { "q": "What is Databricks' unified governance layer?", "a": "Unity Catalog" },
+        { "q": "Which Databricks-created tool tracks ML experiments?", "a": "MLflow" },
+        { "q": "Which Spark API processes streaming data?", "a": "Structured Streaming" },
+        { "q": "Which Delta Lake feature lets you query a table as it was last week?", "a": "Time travel" }
+      ]
+    },
+    {
+      "id": "14-tue-pm-sql-puzzle-7",
+      "post_at": "2026-10-27T18:00:00-04:00",
+      "format": "sql",
+      "hook": ["Interviewer: This sorts 10 before 9...", "Why might that happen?"],
+      "code": "SELECT version\nFROM releases\nORDER BY version;\n-- 1, 10, 11, 2, 9",
+      "trick": [{ "line": 3, "text": "version" }],
+      "hint": "Pay attention to the column type....",
+      "caption": "SQL Puzzle #7: why does 10 sort before 9? 👇 #sql #dataengineering",
+      "answer": "The column is text, which sorts character by character. Fix: ORDER BY CAST(version AS INT)."
+    }
+  ]
+}
