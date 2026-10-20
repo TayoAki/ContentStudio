@@ -218,6 +218,7 @@ const COLUMNS: [table: string, column: string, definition: string][] = [
   ["creators", "avatar_url", "TEXT"],
   ["ideas", "source_post_id", "TEXT"], // the trending video this idea replicates
   ["ideas", "position", "REAL"], // order within its board column (lower = higher priority)
+  ["formats", "archived_at", "TEXT"], // hidden from lists but kept, with its history, until deleted
   ["ideas", "planned_for", "TEXT"], // target date any stage can keep (scheduled_for is the publish date)
   ["trending_posts", "video_url", "TEXT"], // platform CDN video, played inline via /api/media
   ["trending_posts", "media_type", "TEXT"], // video | carousel | photo

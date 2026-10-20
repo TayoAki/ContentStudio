@@ -166,6 +166,64 @@ export function setFormatStatus(ws: string, formatId: string, status: string) {
   run("UPDATE formats SET status = ? WHERE id = ? AND workspace_id = ?", status, formatId, ws);
 }
 
+// ---------- Format lifecycle ----------
+// Archive hides a format but keeps everything linked to it. Delete is only
+// offered once archived, and unlinks (never deletes) its videos and ideas.
+// Merge moves everything onto another format, then removes the duplicate.
+
+function formatRow(ws: string, formatId: string) {
+  const row = db().prepare("SELECT id, name, archived_at FROM formats WHERE id = ? AND workspace_id = ?").get(formatId, ws) as
+    | { id: string; name: string; archived_at: string | null }
+    | undefined;
+  if (!row) throw new IngestError(`Format "${formatId}" not found`);
+  return row;
+}
+
+export function archiveFormat(ws: string, formatId: string, archived = true) {
+  formatRow(ws, formatId);
+  run(
+    "UPDATE formats SET archived_at = CASE WHEN ? THEN COALESCE(archived_at, datetime('now')) ELSE NULL END WHERE id = ? AND workspace_id = ?",
+    archived ? 1 : 0, formatId, ws,
+  );
+}
+
+function inTransaction(fn: () => void) {
+  const conn = db();
+  conn.exec("BEGIN");
+  try {
+    fn();
+    conn.exec("COMMIT");
+  } catch (err) {
+    conn.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+export function deleteFormat(ws: string, formatId: string) {
+  const row = formatRow(ws, formatId);
+  if (!row.archived_at) throw new IngestError("Archive the format first; only archived formats can be deleted.");
+  inTransaction(() => {
+    run("UPDATE trending_posts SET format_id = NULL WHERE format_id = ? AND workspace_id = ?", formatId, ws);
+    run("UPDATE ideas SET format_id = NULL WHERE format_id = ? AND workspace_id = ?", formatId, ws);
+    run("DELETE FROM formats WHERE id = ? AND workspace_id = ?", formatId, ws);
+  });
+}
+
+export function mergeFormats(ws: string, fromId: string, intoId: string): { moved_videos: number; moved_ideas: number } {
+  if (fromId === intoId) throw new IngestError("Pick a different format to merge into.");
+  formatRow(ws, fromId);
+  const into = formatRow(ws, intoId);
+  if (into.archived_at) throw new IngestError(`"${into.name}" is archived. Restore it before merging into it.`);
+  let moved = { moved_videos: 0, moved_ideas: 0 };
+  inTransaction(() => {
+    const videos = db().prepare("UPDATE trending_posts SET format_id = ? WHERE format_id = ? AND workspace_id = ?").run(intoId, fromId, ws);
+    const ideas = db().prepare("UPDATE ideas SET format_id = ? WHERE format_id = ? AND workspace_id = ?").run(intoId, fromId, ws);
+    run("DELETE FROM formats WHERE id = ? AND workspace_id = ?", fromId, ws);
+    moved = { moved_videos: Number(videos.changes), moved_ideas: Number(ideas.changes) };
+  });
+  return moved;
+}
+
 function asStatus(v: unknown, fallback: IdeaStatus): IdeaStatus {
   return IDEA_STATUSES.includes(v as IdeaStatus) ? (v as IdeaStatus) : fallback;
 }

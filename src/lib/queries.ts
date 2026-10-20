@@ -15,6 +15,8 @@ export type Format = {
   total_views: number;
   avg_save_rate: number;
   ideas: number;
+  posted: number; // published posts made from this format's ideas
+  archived_at: string | null;
 };
 
 export type MediaType = "video" | "carousel" | "photo";
@@ -171,24 +173,30 @@ export function listNiches(ws: string): Niche[] {
   );
 }
 
-export function listFormats(ws: string, nicheId?: string): Format[] {
+// Archived formats are left out unless asked for; they keep their history.
+export function listFormats(ws: string, nicheId?: string | null, opts: { archived?: "exclude" | "only" | "all" } = {}): Format[] {
+  const archived = opts.archived ?? "exclude";
   const rows = all<Omit<Format, "structure"> & { structure: string }>(
     `SELECT f.*,
        (SELECT COUNT(*) FROM trending_posts t WHERE t.format_id = f.id) AS examples,
        (SELECT COALESCE(SUM(views), 0) FROM trending_posts t WHERE t.format_id = f.id) AS total_views,
        (SELECT COALESCE(SUM(saves) * 1.0 / NULLIF(SUM(views), 0), 0) FROM trending_posts t WHERE t.format_id = f.id) AS avg_save_rate,
-       (SELECT COUNT(*) FROM ideas i WHERE i.format_id = f.id) AS ideas
+       (SELECT COUNT(*) FROM ideas i WHERE i.format_id = f.id) AS ideas,
+       (SELECT COUNT(*) FROM posts p JOIN ideas i ON i.id = p.idea_id WHERE i.format_id = f.id) AS posted
      FROM formats f
      WHERE f.workspace_id = ?2 AND (?1 IS NULL OR f.niche_id = ?1)
+       AND (?3 = 'all' OR (?3 = 'only') = (f.archived_at IS NOT NULL))
      ORDER BY CASE f.status WHEN 'winner' THEN 0 WHEN 'testing' THEN 1 WHEN 'watching' THEN 2 ELSE 3 END, total_views DESC`,
     nicheId ?? null,
     ws,
+    archived,
   );
   return rows.map((r) => ({ ...r, structure: JSON.parse(r.structure) as string[] }));
 }
 
+// By id, archived or not.
 export function getFormat(ws: string, formatId: string): Format | undefined {
-  return listFormats(ws).find((f) => f.id === formatId);
+  return listFormats(ws, null, { archived: "all" }).find((f) => f.id === formatId);
 }
 
 export function listTrendingPosts(ws: string, opts: { nicheId?: string; formatId?: string } = {}): TrendingPost[] {

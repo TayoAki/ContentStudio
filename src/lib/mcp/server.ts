@@ -18,6 +18,8 @@ import {
   usageToday,
   saveVideoAsIdea,
   type EventInput,
+  archiveFormat,
+  mergeFormats,
 } from "@/lib/ingest";
 import { db } from "@/lib/db";
 import { searchReels, syncCreators } from "@/lib/discovery";
@@ -156,12 +158,12 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
     "get_discover_overview",
     {
       title: "Discover overview",
-      description: "Formats (with example count, views, save rate, status), breakout creators, and top outlier posts for a niche.",
-      inputSchema: { niche_id: z.string(), limit: z.number().int().min(1).max(50).optional() },
+      description: "Formats (with example count, views, save rate, status), breakout creators, and top outlier posts for a niche. Archived formats are left out unless include_archived is set.",
+      inputSchema: { niche_id: z.string(), limit: z.number().int().min(1).max(50).optional(), include_archived: z.boolean().optional() },
       annotations: { readOnlyHint: true },
     },
-    handle(({ niche_id, limit = 10 }: { niche_id: string; limit?: number }) => ({
-      formats: listFormats(ws, niche_id),
+    handle(({ niche_id, limit = 10, include_archived }: { niche_id: string; limit?: number; include_archived?: boolean }) => ({
+      formats: listFormats(ws, niche_id, { archived: include_archived ? "all" : "exclude" }),
       breakout_creators: listCreators(ws, niche_id)
         .filter((c) => c.account_age_days < 180 && c.growth_30d > 0.5)
         .slice(0, limit),
@@ -311,6 +313,37 @@ Prefer educational, save-worthy formats. Always record what you produce in Conte
       if (!format) throw new IngestError(`Format "${format_id}" not found`);
       return { format, brief: claudeBrief(format, listTrendingPosts(ws, { formatId: format_id }), appUrl()) };
     }),
+  );
+
+  // No hard delete over MCP: Claude can tidy up (archive, merge duplicates) but
+  // permanent deletion stays a deliberate step in the app.
+  server.registerTool(
+    "archive_format",
+    {
+      title: "Archive or restore a format",
+      description: "Hide a format that's clutter (a duplicate, a mistake, no longer relevant) while keeping its videos, ideas and stats. Pass restore: true to bring it back. For a format that was tested and failed, set status 'retired' with save_format instead, so it stays visible as a lesson. Duplicates are better merged with merge_formats.",
+      inputSchema: { format_id: z.string(), restore: z.boolean().optional() },
+    },
+    handle(({ format_id, restore }: { format_id: string; restore?: boolean }) => {
+      archiveFormat(ws, format_id, !restore);
+      return { id: format_id, archived: !restore };
+    }),
+  );
+
+  server.registerTool(
+    "merge_formats",
+    {
+      title: "Merge duplicate formats",
+      description: "Move every example video and idea from one format onto another, then remove the duplicate. Use when two formats describe the same pattern. The target must not be archived.",
+      inputSchema: {
+        from_format_id: z.string().describe("The duplicate, removed after the merge"),
+        into_format_id: z.string().describe("The format to keep"),
+      },
+    },
+    handle(({ from_format_id, into_format_id }: { from_format_id: string; into_format_id: string }) => ({
+      into: into_format_id,
+      ...mergeFormats(ws, from_format_id, into_format_id),
+    })),
   );
 
   // ---------------- Recreate ----------------
