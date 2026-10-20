@@ -87,7 +87,7 @@ The last answer appears in the final ~1 s and the video ends: **hard cut, no out
 | Element | Value |
 |---|---|
 | Hook pill | font TikTok Sans 500, 63 px; box `#E83C40`; padding 27 / 18 px; radius 12 px; line pitch 80 px; first box top y = 249 |
-| List | x = 129; first row cap top 63 px under the hook box; pitch 92 px (8 rows) or 98 px (5 rows); font TikTok Sans 500, 60 px; stroke 4 px `#000000` |
+| List | x = 129; first row cap top 63 px under the hook box; pitch 92 px (8 rows) or 98 px (5 rows); font TikTok Sans 500, 60 px, long answers shrink to fit 760 px (min 46 px); stroke 4 px `#000000` |
 | Question | centre x = 540; first line top y = 1380; font TikTok Sans 500, 58 px; pitch 75 px; max width 860 px; stroke 3 px `#000000` |
 | Timing (8 questions) | hook 4.5 s; 7.0 s per question; answer at +6.25 s; total 60.5 s |
 | Timing (5 questions) | hook 4.0 s; 6.0 s per question; answer at +5.4 s; total 34 s |

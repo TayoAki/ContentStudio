@@ -30,7 +30,7 @@ PILL_RED = (0xE8, 0x3C, 0x40, 255)
 TEXT_WHITE = (0xFC, 0xFC, 0xFC, 255)
 PILL_SIZE, PILL_PAD_X, PILL_PAD_Y, PILL_RADIUS, PILL_PITCH, PILL_TOP = 63, 27, 18, 12, 80, 249
 PILL_MAX_W = 860
-LIST_X, LIST_GAP, LIST_SIZE, LIST_STROKE, LIST_MAX_W = 129, 63, 60, 4, 600  # list cap top sits 63 px under the pill
+LIST_X, LIST_GAP, LIST_SIZE, LIST_STROKE, LIST_MAX_W, LIST_MIN = 129, 63, 60, 4, 760, 46  # list cap top sits 63 px under the pill
 LIST_PITCH = {8: 92, 5: 98}
 Q_TOP, Q_SIZE, Q_PITCH, Q_MAX_W, Q_STROKE = 1380, 58, 75, 860, 3
 TIMING = {  # hook, per question, answer lands at
@@ -119,9 +119,9 @@ def draw_pill(img, text):
     return y1
 
 
-def fit(text, name, size, max_w):
+def fit(text, name, size, max_w, min_size=24):
     f = font(name, size)
-    while f.getlength(text) > max_w and size > 24:
+    while f.getlength(text) > max_w and size > min_size:
         size -= 2
         f = font(name, size)
     return f
@@ -133,7 +133,7 @@ def draw_list(img, n, answers, top):
     answers = [typographic(a) for a in answers]
     for i in range(n):
         text = f"{i + 1}. " + (answers[i] if i < len(answers) else "")
-        f = fit(text, "TikTokSans-500", LIST_SIZE, LIST_MAX_W)
+        f = fit(text, "TikTokSans-500", LIST_SIZE, LIST_MAX_W, LIST_MIN)
         num = font("TikTokSans-500", LIST_SIZE)
         y = top + num.getbbox("1")[3] - num.getbbox("1")[1] + i * pitch  # baseline
         prefix = f"{i + 1}. "
@@ -241,7 +241,10 @@ def sql_frame(reel, bottom_line):
     code_x = CODE_X
     widest = max(mono.getlength(l) for l in code)
     if code_x + widest > PANEL_X1 - 30:  # long lines: shrink to fit the panel
-        mono = font("JetBrainsMono-400", int(CODE_SIZE * (PANEL_X1 - 30 - code_x) / widest))
+        size = int(CODE_SIZE * (PANEL_X1 - 30 - code_x) / widest)
+        if size < 40:
+            sys.exit(f"{reel['id']}: a code line is too long for the panel; break it (max ~28 chars)")
+        mono = font("JetBrainsMono-400", size)
     for i, line in enumerate(code):
         base = top + PANEL_PAD + i * CODE_PITCH + CODE_PITCH * 0.7
         d.text((LINENO_RIGHT, base), str(i + 1), font=font("JetBrainsMono-400", CODE_SIZE), fill=LINENO, anchor="rs")
