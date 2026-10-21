@@ -67,9 +67,10 @@ def youtube_history(url):
             continue
         subs = subs or d.get('channel_follower_count') or 0; name = d.get('channel') or name
         for e in d.get('entries', []):
-            if not e.get('view_count') or not e.get('upload_date'):
+            # with approximate_date, flat entries carry `timestamp` (upload_date stays empty)
+            t = e.get('timestamp') or (int(datetime.strptime(e['upload_date'], '%Y%m%d').timestamp()) if e.get('upload_date') else 0)
+            if not e.get('view_count') or not t:
                 continue
-            t = int(datetime.strptime(e['upload_date'], '%Y%m%d').timestamp())
             posts.append(dict(t=t, views=e['view_count'], likes=0, shares=0, saves=0, comments=0,
                               dur=round(e.get('duration') or 0), text=e.get('title') or '', url=e.get('url') or '',
                               tab=tab))
