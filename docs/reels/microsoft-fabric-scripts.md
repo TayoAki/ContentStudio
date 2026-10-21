@@ -46,17 +46,22 @@ Modelled on: [@selectdata, SQL interview question](https://www.tiktok.com/@selec
 | 2 | "Your sales data lives in a lakehouse, as Delta tables in OneLake." | `tile_reveal` onto the lakehouse explorer | Lakehouse overview page (`capture.mjs`) |
 | 3 | "The report needs import speed, but nobody wants to wait for an import refresh." | `seq`: a refresh spinner, a clock | rebuilt refresh dialog |
 | 4 | "Which storage mode? A, Import. B, DirectQuery. C, Direct Lake. D, Dual." | `typewriter`: the question and the four options, one per word | text only |
-| 5 | "Pause and lock in your answer." | the options card held for 3 s; `comment_box` caret | — |
+| 5 | "Pause, and lock in your answer." | the options card held for 3 s; `comment_box` caret | — |
 | 6 | "It's C. Direct Lake." | `neg_flash` into you; `keyword` shock **DIRECT LAKE** | — |
-| 7 | "Power BI reads the Delta columns straight from OneLake, so a refresh just updates metadata, in seconds." | `page_card` with the highlighter on the Direct Lake description | Direct Lake overview page |
-| 8 | "Now the answer that gets you the job: say when it falls back." | you, raw, punch-in on "falls back" | — |
-| 9 | "Put row-level security on the SQL endpoint and Direct Lake falls back to DirectQuery, and gets slower." | `page_card` on the fallback note | Direct Lake overview page |
-| 10 | "Comment the answer you picked before the reveal." | `comment_box` | — |
+| 7 | "Power BI loads the Delta columns straight from OneLake, and a refresh only copies metadata, in a few seconds." | `focus_card` on the OneLake part of the diagram, then on the refresh paragraph, highlighter on "copies only metadata" and "a few seconds" | [Direct Lake overview](https://learn.microsoft.com/en-us/fabric/fundamentals/direct-lake-overview) |
+| 8 | "Now the answer that gets you the job: there are two kinds of Direct Lake." | `keyword` **GETS YOU THE JOB**, then title *Two kinds of Direct Lake* | — |
+| 9 | "Direct Lake on SQL falls back to DirectQuery when the SQL endpoint has row-level security, and gets slower." | `focus_card` on the "Direct Lake on SQL" bullet, highlighter on "fall back to DirectQuery table storage mode" and "SQL-based granular access control" | Direct Lake overview page |
+| 10 | "Direct Lake on OneLake never falls back, but it doesn't apply that SQL security either." | `focus_card` on the "Direct Lake on OneLake" bullet, highlighter on "doesn't fall back to DirectQuery mode" | Direct Lake overview page |
+| 11 | "Comment the answer you picked before the reveal." | `comment_box`, a "C" typing | — |
 
-**Keep exact:**
-- **Direct Lake:** it reads Delta tables from OneLake with no import refresh. A refresh re-points metadata, in seconds. It needs an F or P capacity. (Field guide, "Five ideas" row 4.)
-- **Fallback:** RLS on the SQL endpoint makes Direct Lake fall back (field guide, Objections table). Before recording, confirm on the Direct Lake overview page that the fallback is to DirectQuery and name it exactly as Microsoft does.
+**Keep exact** (checked Oct 21 2026 on the [Direct Lake overview](https://learn.microsoft.com/en-us/fabric/fundamentals/direct-lake-overview)):
+- **Refresh:** a Direct Lake refresh "copies only metadata (known as framing)" and "can take a few seconds". Say "a few seconds", not "instantly".
+- **Two kinds:**
+    - Direct Lake on SQL analytics endpoints falls back to DirectQuery when it can't load from the Delta table, for example a SQL view or SQL-based granular access control such as RLS (unless fallback is turned off in the model's Direct Lake behavior property).
+    - Direct Lake on OneLake doesn't fall back to DirectQuery. With SQL RLS on the endpoint, its queries succeed but the SQL-based RLS is not applied.
+    - Don't say "Direct Lake falls back" without saying which kind.
 - **"Dual"** is a real Power BI storage mode. Keep all four options real.
+- **Capacity:** Direct Lake needs an F or P capacity (field guide, "Five ideas" row 4).
 
 **Post caption:** Fabric interview question 👇 A, B, C or D? #microsoftfabric #powerbi #dataengineer #interviewprep
 
