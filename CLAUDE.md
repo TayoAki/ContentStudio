@@ -19,4 +19,6 @@ When asked to research a niche or recreate a format, record results in the app r
 4. Generate media → `add_assets` linked by `idea_id`.
 5. After publishing: `mark_posted`, `create_tracked_link`, `record_metrics`; review with `get_format_performance`.
 
+To research a niche and write scripts from what's performing in it, use the `niche-scripts` skill (`.claude/skills/niche-scripts/`); it ends by saving the formats and ideas through the same tools.
+
 If the MCP server isn't connected, the same writes exist as HTTP endpoints under `/api/ingest/*` (README "API").
