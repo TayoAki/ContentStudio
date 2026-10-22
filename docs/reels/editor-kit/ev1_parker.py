@@ -172,7 +172,7 @@ def pp_list(c, t0, t1, items, z, y=None, badge=None, focus=None):
     _full(c, t0, t1, ''.join(rows), z)
 
 
-def pp_window(c, t0, t1, src, z, title='', img_w=None, marks=(), rings=(), scroll=None, width=None, y=None, pad=0, bg='#fff', pip=None):
+def pp_window(c, t0, t1, src, z, title='', img_w=None, marks=(), rings=(), scroll=None, width=None, y=None, pad=0, bg='#fff', pip=None, zoom=None):
     """real screen material in a window frame with a purple title chip, rising in. img_w = the capture's pixel width
     (to scale marks); marks = [(boxes px, t)] highlighter (light pages), rings = [(box px, t)] outline (dark images);
     scroll = (from_px, to_px) pans a tall capture inside a viewport of `view_h` px."""
@@ -205,6 +205,10 @@ def pp_window(c, t0, t1, src, z, title='', img_w=None, marks=(), rings=(), scrol
     c.pre.append(f'gsap.set("#{wid}",{{opacity:0}});')
     c.at(f'tl.fromTo("#{wid}",{{opacity:0,scale:.92,y:60}},{{opacity:1,scale:1,y:0,duration:{8 * F1_:.4f},ease:"power3.out",immediateRender:false}},{fr(t0):.4f});')
     c.at(f'tl.fromTo("#{wid}",{{scale:1}},{{scale:1.035,duration:{fr(t1) - fr(t0) - 8 * F1_:.4f},ease:"none",immediateRender:false}},{fr(t0) + 8 * F1_:.4f});')
+    if zoom:   # his screen-recording punch: the content zooms into the region being talked about (box px, t, scale)
+        (zx, zy, zw, zh), zt, zs = zoom
+        c.at(f'tl.set("#{cid}",{{transformOrigin:"{pad + (zx + zw / 2) * s:.0f}px {pad + (zy + zh / 2) * s:.0f}px"}},{fr(t0):.4f});'
+             f'tl.fromTo("#{cid}",{{scale:1}},{{scale:{zs},duration:{12 * F1_:.4f},ease:"power2.inOut",immediateRender:false}},{fr(zt):.4f});')
     if scroll:
         c.at(f'tl.fromTo("#{cid}",{{y:{-scroll[0] * s:.0f}}},{{y:{-scroll[1] * s:.0f},duration:{fr(t1) - fr(t0):.4f},ease:"power1.inOut",immediateRender:false}},{fr(t0):.4f});')
     sfx(c, t0, 'swish', 0.8)

@@ -64,6 +64,36 @@ Reviewed Oct 22 2026: [Parker Prompts](https://www.youtube.com/@parkerprompts/vi
 - **Captions on the talking head:** small, sentence case, white with key words in yellow, bottom centre.
 - **Pace:** 7–9 s average shot over the whole video, much faster in the cold open (≈1.5 s).
 
+## Cut timing (measured frame by frame, Oct 22)
+
+**Source:** the 16.7× outlier ("I Tried Google's 7 FREE AI Tools", 11:22), every cut detected (`editor-kit/shot_analyze.py`) and matched against a word-level transcript. "5 AI fundamentals" was measured as a check.
+
+**Shot lengths:**
+
+| Shot | Share of time | Median | Middle half |
+| --- | --- | --- | --- |
+| Screen demo (face in circle) | 55% | 5.6 s | 2.2–9.9 s (up to 25 s) |
+| Talking head | 27% | 3.3 s | 1.6–5.1 s |
+| Graphic slide | 18% | 5.4 s | 4.8–7.5 s |
+
+**Rules from the data:**
+- **Cuts land on phrase starts:** 72% within 0.35 s of a new phrase.
+- **A cut comes just before the word:** 73% come before it, with a median gap of 0.12 s. The picture changes, then the word arrives.
+- **The face is the hub.** Counts over the whole video:
+    - face → screen 25, screen → face 27;
+    - face → graphic 17, graphic → face 15;
+    - graphic → screen only 4, screen → graphic only 2.
+    - Screen → screen (27) is a demo continuing.
+- **The face is never gone long:** median 7.2 s between face shots (4.3 s in the second video).
+- **Pace:** a cut every 2.5 s in the first 30 s, then one every 5–7 s for the rest of the video. The second video runs one every 3–4 s throughout.
+- **Long screens keep moving:** something changes inside a screen shot about every 3.4 s (a zoom into the region, a highlight, a scroll).
+
+**Our cut, measured the same way** (`fabric-vs-powerbi-paced`, 45 s):
+- **Cut timing:** cuts sit 0.12 s before the word, every one (`LEAD = 0.12`).
+- **Pace:** one every 2.3 s in the first 30 s; median shot 2.6 s. It's a 45 s reel, so it stays at hook pace.
+- **Hub rule:** no graphic → screen cut; the face is never gone more than about 5 s.
+- **Screens:** they zoom into the line being talked about (`pp_window(..., zoom=…)`).
+
 ## How we build it
 
 **Colours:** ours are **blue** (the kit's default theme); `PP_THEME=purple` gives his.
