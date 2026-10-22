@@ -1,6 +1,6 @@
 """ev1_parker.py — the "Parker" look: clean explainer graphics on a purple ground.
 
-Studied from Parker Prompts (youtube.com/@parkerprompts, 134K subscribers, Oct 2026): long-form AI-tool
+Studied from Parker Prompts (colours: THEMES; ours is blue, theirs purple) (youtube.com/@parkerprompts, 134K subscribers, Oct 2026): long-form AI-tool
 tutorials whose B-roll is one consistent design system, not found footage:
   - a purple radial ground under every graphic beat;
   - a sentence building word by word, centred, white, with the key words in yellow and a soft glow;
@@ -13,43 +13,55 @@ tutorials whose B-roll is one consistent design system, not found footage:
 Every device follows the ev1_devices contract (frame-snapped times, explicit z, transforms only, fromTo with
 immediateRender:false, its own sound cues). Import after ev1_more:  from ev1_parker import *
 """
+import os
 from ev1_more import *  # noqa: F401,F403  (Comp, fr, esc, sfx, W, H, CX, CY, VERTICAL, FPS …)
 
 F1_ = 1 / FPS
 PP_YEL = '#FFE14D'
-PP_EDGE = '#C86BFF'
+THEMES = {
+    # the reference's purple
+    'purple': dict(g0='#8a3cf5', g1='#5a14b8', g2='#2c0861', g3='#16042f', glow='rgba(255,120,220,.28)', shade='rgba(30,0,60,.6)',
+                   edge='#C86BFF', edge_glow='rgba(200,107,255,.8)', fill='rgba(60,10,120,.55)', chip='#7b2ff7',
+                   chap0='#9b4dff', chap1='#c86bff', chapb='#5a14b8', fl0='rgba(255,150,230,.95)', fl1='rgba(170,60,255,.55)'),
+    # ours (default): the same system in blue
+    'blue': dict(g0='#2f86ff', g1='#1448c4', g2='#0a2266', g3='#040c26', glow='rgba(90,210,255,.30)', shade='rgba(0,12,45,.6)',
+                 edge='#5AB8FF', edge_glow='rgba(90,184,255,.8)', fill='rgba(10,45,130,.55)', chip='#1f6bff',
+                 chap0='#2f7bff', chap1='#5ab8ff', chapb='#0b3aa8', fl0='rgba(160,225,255,.95)', fl1='rgba(40,120,255,.55)'),
+}
+T = THEMES[os.environ.get('PP_THEME', 'blue')]
+PP_EDGE = T['edge']
 PP_CSS = f'''
 .pp-ground{{position:absolute;left:0;top:0;width:{W}px;height:{H}px;overflow:hidden;
-  background:radial-gradient(ellipse 85% 60% at 50% 38%,#8a3cf5 0%,#5a14b8 38%,#2c0861 72%,#16042f 100%)}}
+  background:radial-gradient(ellipse 85% 60% at 50% 38%,{T['g0']} 0%,{T['g1']} 38%,{T['g2']} 72%,{T['g3']} 100%)}}
 .pp-glow{{position:absolute;width:{round(W * .9)}px;height:{round(W * .9)}px;border-radius:50%;
-  background:radial-gradient(circle,rgba(255,120,220,.28),rgba(255,120,220,0) 70%)}}
+  background:radial-gradient(circle,{T['glow']},rgba(0,0,0,0) 70%)}}
 .pp-text{{position:absolute;left:{round(W * .07)}px;width:{round(W * .86)}px;text-align:center;
   font:700 var(--pp-size,58px)/1.28 var(--ev1-sans);color:#fff;letter-spacing:-0.01em;
-  text-shadow:0 0 18px rgba(255,255,255,.35),0 4px 24px rgba(30,0,60,.6)}}
+  text-shadow:0 0 18px rgba(255,255,255,.35),0 4px 24px {T['shade']}}}
 .pp-text .w{{opacity:0;display:inline-block;margin:0 .14em}}
-.pp-text .y{{color:{PP_YEL};text-shadow:0 0 22px rgba(255,225,77,.55),0 4px 24px rgba(30,0,60,.6)}}
+.pp-text .y{{color:{PP_YEL};text-shadow:0 0 22px rgba(255,225,77,.55),0 4px 24px {T['shade']}}}
 .pp-badge{{display:inline-flex;align-items:center;justify-content:center;width:var(--pp-b,74px);height:var(--pp-b,74px);
   border:4px solid {PP_EDGE};border-radius:16px;font:800 calc(var(--pp-b,74px)*.55)/1 var(--ev1-sans);color:#fff;
-  background:rgba(60,10,120,.55);box-shadow:0 0 18px rgba(200,107,255,.8),inset 0 0 12px rgba(200,107,255,.5)}}
+  background:{T['fill']};box-shadow:0 0 18px {T['edge_glow']},inset 0 0 12px {T['edge_glow']}}}
 .pp-pill{{display:inline-flex;align-items:center;height:var(--pp-b,74px);padding:0 30px;border:4px solid {PP_EDGE};border-radius:16px;
   font:800 calc(var(--pp-b,74px)*.42)/1 var(--ev1-sans);color:#fff;text-transform:uppercase;letter-spacing:.02em;
-  background:rgba(60,10,120,.55);box-shadow:0 0 18px rgba(200,107,255,.8),inset 0 0 12px rgba(200,107,255,.5);white-space:nowrap}}
+  background:{T['fill']};box-shadow:0 0 18px {T['edge_glow']},inset 0 0 12px {T['edge_glow']};white-space:nowrap}}
 .pp-tile{{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;width:var(--pp-t,200px);height:var(--pp-t,200px);
   border-radius:34px;background:linear-gradient(160deg,#2a2a33,#15151b);border:2px solid rgba(255,255,255,.12);
-  box-shadow:0 18px 50px rgba(10,0,30,.55),0 0 0 1px rgba(0,0,0,.4)}}
+  box-shadow:0 18px 50px {T['shade']},0 0 0 1px rgba(0,0,0,.4)}}
 .pp-tile img{{width:52%;height:auto;border-radius:12px}}
 .pp-tile span{{font:700 calc(var(--pp-t,200px)*.11)/1.1 var(--ev1-sans);color:#e9e6f2;text-align:center}}
 .pp-win{{position:absolute;border-radius:22px;overflow:hidden;background:#1d1d24;border:2px solid rgba(255,255,255,.16);
-  box-shadow:0 40px 110px rgba(10,0,30,.7),0 0 40px rgba(200,107,255,.35)}}
+  box-shadow:0 40px 110px {T['shade']},0 0 40px {T['edge_glow']}}}
 .pp-win .bar{{height:52px;background:#2a2a32;display:flex;align-items:center;gap:12px;padding:0 20px;position:relative}}
 .pp-win .bar i{{width:16px;height:16px;border-radius:50%;display:block}}
-.pp-chip{{position:absolute;left:50%;top:9px;transform:translateX(-50%);padding:6px 22px;border-radius:10px;background:#7b2ff7;
-  font:700 22px/1.2 var(--ev1-sans);color:#fff;white-space:nowrap;box-shadow:0 0 16px rgba(123,47,247,.7)}}
+.pp-chip{{position:absolute;left:50%;top:9px;transform:translateX(-50%);padding:6px 22px;border-radius:10px;background:{T['chip']};
+  font:700 22px/1.2 var(--ev1-sans);color:#fff;white-space:nowrap;box-shadow:0 0 16px {T['edge_glow']}}}
 .pp-hl{{position:absolute;background:{PP_YEL};mix-blend-mode:multiply;transform-origin:0 50%;border-radius:4px}}
 .pp-ring{{position:absolute;border:7px solid {PP_YEL};border-radius:22px;box-shadow:0 0 30px rgba(255,225,77,.65)}}
 .pp-chapter{{position:absolute;display:flex;align-items:center;gap:0;height:96px;border-radius:20px;overflow:hidden;
-  background:linear-gradient(90deg,#9b4dff,#c86bff);box-shadow:0 0 30px rgba(200,107,255,.8)}}
-.pp-chapter b{{display:flex;align-items:center;justify-content:center;width:96px;height:96px;background:#5a14b8;
+  background:linear-gradient(90deg,{T['chap0']},{T['chap1']});box-shadow:0 0 30px {T['edge_glow']}}}
+.pp-chapter b{{display:flex;align-items:center;justify-content:center;width:96px;height:96px;background:{T['chapb']};
   font:900 italic 54px/1 var(--ev1-sans);color:#fff}}
 .pp-chapter span{{padding:0 34px;font:900 italic 50px/1 var(--ev1-sans);color:#fff;text-transform:uppercase;white-space:nowrap}}
 '''
@@ -64,7 +76,7 @@ def _full(c, t0, t1, inner, z):
 
 
 def pp_ground(c, t0, t1, z=0):
-    """the purple ground, with a slow pink glow drifting across it (never a still frame)"""
+    """the ground (blue by default; PP_THEME=purple for the reference's colour), with a slow pink glow drifting across it (never a still frame)"""
     _css(c)
     gid = c.uid('ppg')
     cid = _full(c, t0, t1, f'<div class="pp-ground"><div id="{gid}" class="pp-glow" style="left:{-W // 4}px;top:{H // 6}px"></div></div>', z)
@@ -160,7 +172,7 @@ def pp_list(c, t0, t1, items, z, y=None, badge=None, focus=None):
     _full(c, t0, t1, ''.join(rows), z)
 
 
-def pp_window(c, t0, t1, src, z, title='', img_w=None, marks=(), rings=(), scroll=None, width=None, y=None, pad=0, bg='#fff'):
+def pp_window(c, t0, t1, src, z, title='', img_w=None, marks=(), rings=(), scroll=None, width=None, y=None, pad=0, bg='#fff', pip=None):
     """real screen material in a window frame with a purple title chip, rising in. img_w = the capture's pixel width
     (to scale marks); marks = [(boxes px, t)] highlighter (light pages), rings = [(box px, t)] outline (dark images);
     scroll = (from_px, to_px) pans a tall capture inside a viewport of `view_h` px."""
@@ -196,6 +208,8 @@ def pp_window(c, t0, t1, src, z, title='', img_w=None, marks=(), rings=(), scrol
     if scroll:
         c.at(f'tl.fromTo("#{cid}",{{y:{-scroll[0] * s:.0f}}},{{y:{-scroll[1] * s:.0f},duration:{fr(t1) - fr(t0):.4f},ease:"power1.inOut",immediateRender:false}},{fr(t0):.4f});')
     sfx(c, t0, 'swish', 0.8)
+    if pip:
+        pp_pip(c, t0, t1, pip[0], z + 2, focus=pip[1] if len(pip) > 1 else (.5, .3))
     return wid
 
 
@@ -248,7 +262,7 @@ def pp_flash(c, t, z=90, frames_n=8):
     _css(c)
     fid = c.uid('ppf')
     _full(c, t - 3 * F1_, t + frames_n * F1_, f'<div id="{fid}" style="position:absolute;left:0;top:0;width:{W}px;height:{H}px;opacity:0;'
-                                              f'background:radial-gradient(ellipse at 30% 40%,rgba(255,150,230,.95),rgba(170,60,255,.55) 45%,rgba(120,20,220,0) 80%)"></div>', z)
+                                              f'background:radial-gradient(ellipse at 30% 40%,{T['fl0']},{T['fl1']} 45%,rgba(0,0,0,0) 80%)"></div>', z)
     c.at(f'tl.fromTo("#{fid}",{{opacity:0}},{{opacity:1,duration:{3 * F1_:.4f},immediateRender:false}},{fr(t) - 3 * F1_:.4f});'
          f'tl.to("#{fid}",{{opacity:0,duration:{frames_n * F1_:.4f}}},{fr(t):.4f});')
     sfx(c, t, 'swish', 0.6)
@@ -257,3 +271,59 @@ def pp_flash(c, t, z=90, frames_n=8):
 def pp_captions(c, words, t_end, z=60, y=None, yellow=(), size=None):
     """the small caption under screen beats: white, key words yellow (a pp_text at the bottom)"""
     pp_text(c, words[0][1], t_end, words, z, y=y or round(H * (.80 if VERTICAL else .88)), size=size or (46 if VERTICAL else 40), yellow=yellow, fade=3)
+
+
+def pp_pip(c, t0, t1, src, z, focus=(.5, .3), size=None, x=None, y=None, zoom=2.2):
+    """the presenter in a ringed circle, top right, over screen material (his face cam). src = the talking-head
+    take (video) or, until it exists, a still; focus = the face centre as fractions of the frame."""
+    _css(c)
+    size = size or (250 if VERTICAL else 230)
+    x = x if x is not None else W - size - (50 if VERTICAL else 60)
+    y = y if y is not None else (190 if VERTICAL else 50)
+    pid = c.uid('pip')
+    media = (f'<video class="clip" src="{src}" muted playsinline' if src.endswith(('.mp4', '.mov', '.webm')) else f'<img src="{src}"')
+    inner = (f'<div id="{pid}" style="position:absolute;left:{x}px;top:{y}px;width:{size}px;height:{size}px;border-radius:50%;overflow:hidden;'
+             f'border:7px solid {PP_EDGE};box-shadow:0 0 30px {T["edge_glow"]},0 14px 40px rgba(0,0,0,.5);background:#111">'
+             f'{media} style="position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;object-position:{focus[0] * 100:.0f}% {focus[1] * 100:.0f}%;'
+             f'transform:scale({zoom});transform-origin:{focus[0] * 100:.0f}% {focus[1] * 100:.0f}%"></div>')
+    _full(c, t0, t1, inner, z)
+    c.at(f'tl.fromTo("#{pid}",{{scale:0,opacity:0}},{{scale:1,opacity:1,duration:{6 * F1_:.4f},ease:"back.out(1.7)",immediateRender:false}},{fr(t0) + 4 * F1_:.4f});')
+
+
+def pp_talk(c, t0, t1, src, z, focus=(.5, .32), tight=False, punches=(), push=0.03):
+    """the talking head, edge to edge (a 16:9 take is cover-cropped around the face on a 9:16 frame). tight=True is the
+    closer framing he cuts to; punches = [(t, scale)] hard punch-ins on a word. src: the take (video), or a still
+    standing in for it until the take exists."""
+    t0, t1 = fr(t0), fr(t1)
+    s0 = 1.32 if tight else 1.0
+    org = f'{focus[0] * 100:.0f}% {focus[1] * 100:.0f}%'
+    if src.endswith(('.mp4', '.mov', '.webm')):
+        return broll(c, t0, t1, src, z, rate=push, start_scale=s0, origin=org, media_start=t0, punches=punches)
+    iid = c.uid('talk')
+    c.clip(t0, t1, f'<img id="{iid}" src="{src}" class="ev1-fill" style="object-fit:cover;object-position:{org};transform-origin:{org}">', z)
+    c.pre.append(f'gsap.set("#{iid}",{{scale:{s0}}});')
+    c.at(f'tl.fromTo("#{iid}",{{scale:{s0}}},{{scale:{s0 + push * (t1 - t0):.4f},duration:{t1 - t0:.4f},ease:"none",immediateRender:false}},{t0:.4f});')
+    for tp, sc in punches:
+        c.at(f'tl.set("#{iid}",{{scale:{sc}}},{fr(tp):.4f});tl.fromTo("#{iid}",{{scale:{sc}}},{{scale:{sc + push * (t1 - fr(tp)):.4f},duration:{t1 - fr(tp):.4f},ease:"none",immediateRender:false}},{fr(tp):.4f});')
+    return iid
+
+
+def pp_prompt(c, t0, t1, text, z, t_type=None, y=None, width=None, cps=28, label='PROMPT'):
+    """his PROMPT card: a dark glass card with a title strip, the prompt typing in (cps characters a second)"""
+    _css(c)
+    width = width or (W - 140 if VERTICAL else round(W * .55))
+    y = CY if y is None else y
+    cid = c.uid('ppq')
+    t_type = fr(t_type if t_type is not None else t0 + 6 * F1_)
+    chars = []
+    for j, ch in enumerate(text):
+        sid = c.uid('pq')
+        chars.append(f'<span id="{sid}" style="opacity:0">{esc(ch)}</span>')
+        c.at(f'tl.set("#{sid}",{{opacity:1}},{t_type + j / cps:.4f});')
+    inner = (f'<div id="{cid}" style="position:absolute;left:{(W - width) // 2}px;top:{y}px;width:{width}px;transform:translateY(-50%);border-radius:22px;overflow:hidden;'
+             f'background:linear-gradient(180deg,rgba(40,44,56,.92),rgba(18,20,28,.95));border:2px solid rgba(255,255,255,.18);box-shadow:0 30px 90px {T["shade"]},0 0 30px {T["edge_glow"]}">'
+             f'<div style="padding:16px 0;text-align:center;font:800 30px/1 var(--ev1-sans);letter-spacing:.12em;color:#e8ecf5;background:rgba(255,255,255,.06);border-bottom:2px solid rgba(255,255,255,.1)">{esc(label)}</div>'
+             f'<div style="padding:34px 40px;font:600 {44 if VERTICAL else 36}px/1.35 var(--ev1-sans);color:#fff;min-height:{170 if VERTICAL else 120}px">{"".join(chars)}</div></div>')
+    _full(c, t0, t1, inner, z)
+    c.at(f'tl.fromTo("#{cid}",{{opacity:0,scale:.9}},{{opacity:1,scale:1,duration:{6 * F1_:.4f},ease:"power3.out",immediateRender:false}},{fr(t0):.4f});')
+    sfx(c, t0, 'swish', 0.7)

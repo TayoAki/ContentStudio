@@ -5,16 +5,37 @@ Reviewed Oct 22 2026: [Parker Prompts](https://www.youtube.com/@parkerprompts/vi
 - **Format:** long-form AI-tool tutorials, 8–16 min, typical video ≈35K views.
 - **Watched in full:** "I tried Google's 7 FREE AI Tools" and "5 AI fundamentals".
 
-## What performs on his channel
+## What performs on his channel (outlier method)
 
-| Views | Title | Shape |
-| --- | --- | --- |
-| 220K (≈6× typical) | ChatGPT vs Claude vs Gemini: Which $20 AI Plan Is Worth It? | Head-to-head with a money question |
-| 99K | How to Build a Second Brain With NotebookLM + Obsidian (Full Setup) | Two tools combined into a system |
-| 77K | How to Create High Quality AI Videos With Claude | Outcome-first how-to |
-| 67K | The Best FREE AI Tools Right Now (2026) | Free list |
-| 67K | How to Use Gemini Notebook Better than 99% of People | Mastery promise |
-| — | "Master 97% of X in 12 Minutes" (many videos) | Repeated title template |
+**Method:** views ÷ the channel's median over all 83 videos. The median is **47K**.
+
+| × median | Views | Length | Title |
+| --- | --- | --- | --- |
+| **16.7×** | 783K | 11 min | I Tried Google's 7 FREE AI Tools (Destroys All Paid Alternatives) |
+| **8.0×** | 375K | 19 min | How to Use NotebookLM Better than 99% of People |
+| **5.7×** | 270K | 6 min | How to Use Grok AI Better than 99% of People |
+| 4.9× | 230K | 11 min | Google's 6 Hour Prompt Engineering Course in 10 Minutes |
+| 4.8× | 225K | 10 min | The Only AI Guide You'll Ever Need in 2026 |
+| 4.7× | 220K | 13 min | ChatGPT vs Claude vs Gemini: Which $20 AI Plan Is Worth It? |
+| 4.2× | 198K | 9 min | I Tested Gemini vs Claude vs ChatGPT So You Don't Have To |
+| 4.2× | 197K | 12 min | Claude's 13 Free AI Courses in 12 Minutes |
+
+**What the outliers have in common:**
+- **A free / money angle:** "FREE", "$20 plan", "free courses".
+- **A mastery promise:** "better than 99% of people", "in 10 minutes".
+- **Or a head-to-head test.**
+
+**Studied in full:**
+- #1, via its TikTok copy: full video, transcript, every cut.
+- #2, #3 and #4: YouTube storyboard frames across the whole video.
+
+**What the outliers are made of** (share of storyboard frames):
+
+| Kind of shot | Share of frames |
+| --- | --- |
+| Screen demo in a framed window, with his face in a ringed circle (top right) | ~55–70% |
+| Talking head on camera, cut back to every 30–60 s, alternating wide and tight framings | ~20% |
+| Graphic slides between: word-by-word text, numbered lists, big numeral + word ("1 Task"), a PROMPT card typing, icon rows | ~15–25% |
 
 **For us:**
 - "Databricks vs Fabric: which one is worth it for your team?" is his best shape.
@@ -44,6 +65,9 @@ Reviewed Oct 22 2026: [Parker Prompts](https://www.youtube.com/@parkerprompts/vi
 - **Pace:** 7–9 s average shot over the whole video, much faster in the cold open (≈1.5 s).
 
 ## How we build it
+
+**Colours:** ours are **blue** (the kit's default theme); `PP_THEME=purple` gives his.
+
 The kit is `components/ev1_parker.py` in the Editor V1 skill (a copy is in `docs/reels/editor-kit/`). Use `from ev1_parker import *` in a video's `build.py`; it works in 16:9 and 9:16.
 
 | His device | Kit function |
@@ -57,7 +81,15 @@ The kit is `components/ev1_parker.py` in the Editor V1 skill (a copy is in `docs
 | Step flow with dashed connectors | `pp_flow` |
 | Screen material in a window with a title chip; highlighter / outline / scroll | `pp_window` |
 | Chapter pill | `pp_chapter` |
-| Pink light flash | `pp_flash` |
+| Pink light flash (blue in ours) | `pp_flash` |
+| Talking head, wide / tight, punch-ins | `pp_talk` |
+| Face in a ringed circle over screen material | `pp_pip` (or `pp_window(..., pip=…)`) |
+| PROMPT card typing | `pp_prompt` |
+
+**Second cut, Oct 22 (blue, with structure):**
+- talking head → graphic → screen with the face circle → graphic → talking head;
+- a light flash on every change of kind;
+- the presenter is a **placeholder still** until the real take exists.
 
 **First video in this look:** Script 1 "Fabric vs Power BI" (`ALL-SCRIPTS.md`).
 - Built from Microsoft's own icons and diagram (cropped from the Microsoft Learn architecture image) and Microsoft Learn pages in windows.
