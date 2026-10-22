@@ -172,7 +172,7 @@ def pp_list(c, t0, t1, items, z, y=None, badge=None, focus=None):
     _full(c, t0, t1, ''.join(rows), z)
 
 
-def pp_window(c, t0, t1, src, z, title='', img_w=None, marks=(), rings=(), scroll=None, width=None, y=None, pad=0, bg='#fff', pip=None, zoom=None):
+def pp_window(c, t0, t1, src, z, title='', img_w=None, marks=(), rings=(), scroll=None, width=None, y=None, pad=0, bg='#fff', pip=None, zoom=None, stage=True):
     """real screen material in a window frame with a purple title chip, rising in. img_w = the capture's pixel width
     (to scale marks); marks = [(boxes px, t)] highlighter (light pages), rings = [(box px, t)] outline (dark images);
     scroll = (from_px, to_px) pans a tall capture inside a viewport of `view_h` px."""
@@ -198,6 +198,11 @@ def pp_window(c, t0, t1, src, z, title='', img_w=None, marks=(), rings=(), scrol
     if scroll:
         view = f'height:{scroll[2]}px;overflow:hidden;'
     chip = f'<div class="pp-chip">{esc(title)}</div>' if title else ''
+    if stage:   # Hypit's Stage: the same material enlarged, blurred and dimmed behind the window, so 9:16 never shows empty ground
+        sid_ = c.uid('ppst')
+        _full(c, t0, t1, f'<img id="{sid_}" src="{src}" style="position:absolute;left:-10%;top:-10%;width:120%;height:120%;object-fit:cover;'
+                         f'filter:blur(38px) brightness(.42) saturate(1.2);opacity:.9">', z - 1)
+        c.at(f'tl.fromTo("#{sid_}",{{scale:1.08}},{{scale:1.16,duration:{fr(t1) - fr(t0):.4f},ease:"none",immediateRender:false}},{fr(t0):.4f});')
     inner = (f'<div id="{wid}" class="pp-win" style="left:{(W - width) // 2}px;top:{y}px;width:{width}px;transform:translateY(-50%)">'
              f'<div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>{chip}</div>'
              f'<div style="position:relative;{view}background:{bg if pad else 'transparent'};padding:{pad}px"><div id="{cid}" style="position:relative"><img src="{src}" style="display:block;width:100%">{"".join(mk)}</div></div></div>')
@@ -331,3 +336,29 @@ def pp_prompt(c, t0, t1, text, z, t_type=None, y=None, width=None, cps=28, label
     _full(c, t0, t1, inner, z)
     c.at(f'tl.fromTo("#{cid}",{{opacity:0,scale:.9}},{{opacity:1,scale:1,duration:{6 * F1_:.4f},ease:"power3.out",immediateRender:false}},{fr(t0):.4f});')
     sfx(c, t0, 'swish', 0.7)
+
+
+def pp_timer(c, t0, t1, z, title='', seconds=None, x=None, y=None):
+    """Hypit's persistent topic plaque + countdown: the topic in small caps and a digital clock counting down from
+    `seconds` (default: the window's length) to 0:00 on the last frame. A retention device: the viewer sees how
+    much is left, and that it's short."""
+    _css(c)
+    t0, t1 = fr(t0), fr(t1)
+    seconds = seconds or (t1 - t0)
+    x = 46 if x is None else x
+    y = (150 if VERTICAL else 40) if y is None else y
+    pid, did = c.uid('ppt'), c.uid('pptd')
+    n = int(round((t1 - t0)))
+    digits = []
+    for k in range(n + 1):
+        left = max(0, int(round(seconds - k * seconds / max(n, 1))))
+        sid = c.uid('pptn')
+        digits.append(f'<span id="{sid}" style="position:absolute;left:0;top:0;opacity:0">{left // 60}:{left % 60:02d}</span>')
+        c.at(f'tl.set("#{sid}",{{opacity:1}},{t0 + k:.4f});' + (f'tl.set("#{sid}",{{opacity:0}},{min(t1, t0 + k + 1):.4f});' if k < n else ''))
+    inner = (f'<div id="{pid}" style="position:absolute;left:{x}px;top:{y}px;display:flex;align-items:stretch;border-radius:16px;overflow:hidden;'
+             f'box-shadow:0 10px 30px rgba(0,0,0,.45),0 0 22px {T["edge_glow"]};border:2px solid {PP_EDGE}">'
+             f'<div style="padding:12px 18px;background:{T["chip"]};font:900 italic 26px/1.05 var(--ev1-sans);color:#fff;text-transform:uppercase;white-space:nowrap;align-self:center">{esc(title)}</div>'
+             f'<div id="{did}" style="position:relative;width:128px;background:#0b1020;font:700 44px/60px var(--ev1-mono);color:{PP_YEL};'
+             f'text-shadow:0 0 14px rgba(255,225,77,.7);letter-spacing:.02em"><div style="position:absolute;left:14px;top:2px;width:110px;height:68px">{"".join(digits)}</div></div></div>')
+    _full(c, t0, t1, inner, z)
+    c.at(f'tl.fromTo("#{pid}",{{x:-60,opacity:0}},{{x:0,opacity:1,duration:{6 * F1_:.4f},ease:"power3.out",immediateRender:false}},{t0:.4f});')
