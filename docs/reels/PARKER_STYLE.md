@@ -180,7 +180,7 @@ The kit is `components/ev1_parker.py` in the Editor V1 skill (a copy is in `docs
 - No stock images, no invented UI.
 
 ## What we still need from you to match him
-1. **A face.** His talking head carries most of the runtime, and our examples use a synthetic voice and no face.
+1. **A presenter.** The talking head carries about a quarter of his runtime. His presenter is AI-generated (per you), so this can be an AI presenter too (`AI-PRESENTER.md`): a synthetic host, or you dubbed from one reference clip.
     - Record in good light, mid-shot, plain background.
     - The edit adds the chapter pills, captions and flashes, and puts you in the ringed circle over screen demos.
 2. **Real screen recordings** of Fabric / Databricks / Power BI doing the thing you're talking about (OBS or the Mac screen recorder, 1080p). They replace the page captures.

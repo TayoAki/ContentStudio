@@ -24,11 +24,17 @@
 5. **Same timing:** the cuts, captions and Parker pacing stay as they are, because they're anchored to the script's words.
 
 ## Rules
-- **Only your face** (or a consented, licensed one). The placeholder photo in our examples is someone else. It stays a still placeholder and must never be animated to say our script.
+- **Only your face, a consented or licensed one, or a fully synthetic presenter that resembles no real person.** The placeholder photo in our examples is someone else. It stays a still placeholder and must never be animated to say our script.
 - **Label it.** TikTok, Instagram and YouTube require realistic AI-generated or altered video to be disclosed: use each platform's AI label.
 - **Same fact standard as a real take:** the AI presenter says only the checked script.
 
 ## Recommendation
-Recording yourself is still the best version, and Parker's channel is a real person. InfiniteTalk is worth it for **volume**: one reference clip, then a new talking-head take per script without filming.
+**Correction (Oct 22):** Parker Prompts' presenter is AI-generated (per you; I couldn't confirm it from the videos, but they fit it: the same studio, framing and light in every video). So the reference channel, 134K subscribers with a 783K-view outlier, already runs on an AI presenter. That makes this the main path, not a fallback.
+
+**Two ways to do it:**
+- **A fully synthetic presenter**, like Parker: a made-up person who resembles no real one, with a consistent look and voice used in every video. Generate a portrait, record nothing, keep it as the channel's "host".
+- **You, dubbed:** one reference clip of you, re-performed to each script. More trust for a sales engineer selling to data teams, because it's your face on the brand.
+
+Either way: label it as AI on each platform, and never animate a real person who hasn't agreed (including our placeholder photo).
 
 **First test:** one 47 s script (Fabric vs Power BI), your reference clip, a hosted API (≈ $3). Compare it side by side with a real take before committing.
