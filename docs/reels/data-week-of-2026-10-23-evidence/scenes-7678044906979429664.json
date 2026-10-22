@@ -1,0 +1,102 @@
+{
+ "post": {
+  "t": 1787684141,
+  "views": 147304,
+  "likes": 11706,
+  "shares": 419,
+  "saves": 3526,
+  "comments": 165,
+  "dur": 71,
+  "text": "\u201cProficient in SQL\" = six keywords and knowing what to ask. #sql #programming #techcareer #jobhunting #techtok ",
+  "url": "https://www.tiktok.com/@zubayer.hossain470/video/7678044906979429664",
+  "account": "zubayer.hossain470",
+  "followers": 13302,
+  "x": 11.07
+ },
+ "scenes": [
+  {
+   "n": 1,
+   "t0": 0.0,
+   "t1": 6.97,
+   "said": "Proficient in SQL. Well, I've seen production SQL 200 lines and this is something that I've never understood."
+  },
+  {
+   "n": 2,
+   "t0": 6.97,
+   "t1": 14.03,
+   "said": "Well, nobody writes all of that lines in one day. Proficient just means like knowing six keywords."
+  },
+  {
+   "n": 3,
+   "t0": 14.03,
+   "t1": 15.23,
+   "said": "Only six?"
+  },
+  {
+   "n": 4,
+   "t0": 15.23,
+   "t1": 22.87,
+   "said": "Select, from, where, joined, grouped by, and ordered by. That's most of the job."
+  },
+  {
+   "n": 5,
+   "t0": 22.87,
+   "t1": 25.0,
+   "said": "Ah, that can't be true. The"
+  },
+  {
+   "n": 6,
+   "t0": 25.0,
+   "t1": 36.17,
+   "said": "The actual work is the questions like how many users signed up last week. Which product sells the most? You translate those questions into keywords. And"
+  },
+  {
+   "n": 7,
+   "t0": 36.17,
+   "t1": 38.83,
+   "said": "the 200 line monster queries grew"
+  },
+  {
+   "n": 8,
+   "t0": 38.83,
+   "t1": 44.2,
+   "said": "over the years, layer by layer. And whoever wrote them googled half of it."
+  },
+  {
+   "n": 9,
+   "t0": 44.2,
+   "t1": 46.87,
+   "said": "So how do I practice like it's real work?"
+  },
+  {
+   "n": 10,
+   "t0": 46.87,
+   "t1": 55.8,
+   "said": "Well, grab a sample database, write 10 questions business would ask, answer them in SQL, and put it on your GitHub."
+  },
+  {
+   "n": 11,
+   "t0": 55.8,
+   "t1": 59.47,
+   "said": "That's doable and boring."
+  },
+  {
+   "n": 12,
+   "t0": 59.47,
+   "t1": 65.93,
+   "said": "That's actually a secret. Being proficient in SQL is like a Tuesday, not a superpower."
+  },
+  {
+   "n": 13,
+   "t0": 65.93,
+   "t1": 70.23,
+   "said": "This one also says strong CS fundamentals, but I don't have a degree."
+  },
+  {
+   "n": 14,
+   "t0": 70.23,
+   "t1": 71.24,
+   "said": "Next video."
+  }
+ ]
+}

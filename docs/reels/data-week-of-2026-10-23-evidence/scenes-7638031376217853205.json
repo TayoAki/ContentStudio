@@ -1,0 +1,102 @@
+{
+ "post": {
+  "t": 1778367771,
+  "views": 68952,
+  "likes": 3193,
+  "shares": 225,
+  "saves": 2175,
+  "comments": 56,
+  "dur": 70,
+  "text": "Microsoft Fabric vs. Power BI is the most searched question online in data analysis space. Power BI is a reporting tool that is used for visualization whereas Fabric is an end to end analytics platform that includes Power BI plus many other tools like Data Factory, Synapse, Lakehouses and Warehouses on OneLake, and AI Data agents.  For current Power BI developers Fabric is a great opportunity to upskill and become a future ready Full Stack Data Professional.  #dataanalyst  #microsoftfabric  #powerbi #aiagents #corporate ",
+  "url": "https://www.tiktok.com/@shreya.knows.data/video/7638031376217853205",
+  "account": "shreya.knows.data",
+  "followers": 6918,
+  "x": 9.97
+ },
+ "scenes": [
+  {
+   "n": 1,
+   "t0": 0.0,
+   "t1": 1.33,
+   "said": "Is Microsoft Fabric just"
+  },
+  {
+   "n": 2,
+   "t0": 1.33,
+   "t1": 3.8,
+   "said": "the new Power BI? Absolutely not."
+  },
+  {
+   "n": 3,
+   "t0": 3.8,
+   "t1": 7.1,
+   "said": "This is Fabric and this is Power BI."
+  },
+  {
+   "n": 4,
+   "t0": 7.1,
+   "t1": 17.07,
+   "said": "Power BI is a reporting tool and reporting is usually the last step in a data life cycle. Before that, your data goes to multiple tools. Some tools bring data in like Data Factory"
+  },
+  {
+   "n": 5,
+   "t0": 17.07,
+   "t1": 20.67,
+   "said": "Factory and 5 -trans. Some store it like Snowflakes and sign apps. Then"
+  },
+  {
+   "n": 6,
+   "t0": 20.67,
+   "t1": 22.17,
+   "said": "there are tools that transform it"
+  },
+  {
+   "n": 7,
+   "t0": 22.17,
+   "t1": 24.13,
+   "said": "it like Databricks and DBT. Then"
+  },
+  {
+   "n": 8,
+   "t0": 24.13,
+   "t1": 26.13,
+   "said": "comes your reporting with tools like Power"
+  },
+  {
+   "n": 9,
+   "t0": 26.13,
+   "t1": 28.0,
+   "said": "BI and Tableau. And now"
+  },
+  {
+   "n": 10,
+   "t0": 28.0,
+   "t1": 29.57,
+   "said": "we also have AI tools like Foundry"
+  },
+  {
+   "n": 11,
+   "t0": 29.57,
+   "t1": 31.0,
+   "said": "and Langraph. So as"
+  },
+  {
+   "n": 12,
+   "t0": 31.0,
+   "t1": 37.7,
+   "said": "you can see, Power BI is just one of the tools in the whole life cycle. Fabric is Microsoft saying what if all of this could be done in"
+  },
+  {
+   "n": 13,
+   "t0": 37.7,
+   "t1": 38.83,
+   "said": "in one platform. So instead"
+  },
+  {
+   "n": 14,
+   "t0": 38.83,
+   "t1": 69.78,
+   "said": "of jumping between four or five tools, we have one place where raw data gets converted into insights and can be used for AI within one system itself. And if you are a Power BI developer, Fabric expands what you can do because now you're not just building reports. You can now understand and control where your data comes from, how it's stored, how it's shaped. And you can build AI agents on top of it all, essentially making you the owner of entire data life cycle. And that is what full stack data professionals do."
+  }
+ ]
+}

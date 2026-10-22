@@ -88,6 +88,18 @@ Scripts live in `<skill>/scripts/`; run them with `python3 -I`.
    term, Instagram has no saves or shares, YouTube Shorts are undercounted, and older YouTube dates
    are approximate.
 
+## Week plan (odds, shot lists, teleprompter)
+
+When the person wants a ready-to-film **week** rather than a few scripts, follow
+`reference/week-plan.md`. It takes the histories further, through these steps:
+1. `scan.py`: base rates for 1×, 2×, 5× and 10× followers across 20–40 niche accounts.
+2. `teardown.py sheets`: look at every outlier and a random sample of ordinary posts, and tag them.
+3. `odds.py lifts`: which formats, angles and video types the outliers over-use.
+4. `teardown.py scenes`: break down each reference scene by scene, in SEALCaM.
+5. `odds.py score`: odds for each planned post.
+
+The output is `docs/reels/<niche>-week-of-<date>.md`: 7 posts with a funnel mix, each with its odds, script, shot list (each shot borrows a reference scene) and teleprompter, plus the reference breakdowns. Commit the evidence (`base_rates.md`, `lifts.md`, `tags.json`, `plan.json`) beside it.
+
 ## Rules
 
 - **Copy formats, not content.** Never reuse someone's script, words, footage or audio. Their post

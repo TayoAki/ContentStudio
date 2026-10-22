@@ -46,6 +46,7 @@ def tiktok_history(handle, max_pages):
                                         shares=s.get('share_count', 0), saves=s.get('collect_count', 0),
                                         comments=s.get('comment_count', 0),
                                         dur=round(((a.get('video') or {}).get('duration') or 0) / 1000),
+                                        media=(((a.get('video') or {}).get('play_addr') or {}).get('url_list') or [''])[0],
                                         text=(a.get('desc') or '').replace('\n', ' '),
                                         url=f'https://www.tiktok.com/@{handle}/video/{a["aweme_id"]}')
         if not d.get('has_more') or not d.get('max_cursor'):

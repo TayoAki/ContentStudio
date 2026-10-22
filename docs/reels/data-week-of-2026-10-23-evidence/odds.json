@@ -1,0 +1,107 @@
+[
+ {
+  "title": "5 skills for your first Fabric job (Spark not essential)",
+  "multiplier": 1.06,
+  "evidence": 1.06,
+  "funnel": 1.0,
+  "sources_median": 216.5,
+  "odds": {
+   "1": 0.208,
+   "2": 0.137,
+   "5": 0.077,
+   "10": 0.047
+  },
+  "rating": "average",
+  "confidence": "low"
+ },
+ {
+  "title": "Free data training so you don't have to look: Databricks Free Edition",
+  "multiplier": 1.33,
+  "evidence": 1.16,
+  "funnel": 1.15,
+  "sources_median": 24.0,
+  "odds": {
+   "1": 0.26,
+   "2": 0.172,
+   "5": 0.096,
+   "10": 0.059
+  },
+  "rating": "good",
+  "confidence": "high"
+ },
+ {
+  "title": "'Experience with Databricks' on a job post means 5 things",
+  "multiplier": 1.28,
+  "evidence": 1.28,
+  "funnel": 1.0,
+  "sources_median": 11.1,
+  "odds": {
+   "1": 0.251,
+   "2": 0.166,
+   "5": 0.092,
+   "10": 0.057
+  },
+  "rating": "good",
+  "confidence": "medium"
+ },
+ {
+  "title": "Databricks or Microsoft Fabric: which should you learn?",
+  "multiplier": 1.06,
+  "evidence": 1.06,
+  "funnel": 1.0,
+  "sources_median": 10.0,
+  "odds": {
+   "1": 0.208,
+   "2": 0.137,
+   "5": 0.077,
+   "10": 0.047
+  },
+  "rating": "average",
+  "confidence": "low"
+ },
+ {
+  "title": "Back to Basics ep 1: CSV to a Fabric lakehouse table in 60 seconds",
+  "multiplier": 1.2,
+  "evidence": 1.04,
+  "funnel": 1.15,
+  "sources_median": 16.8,
+  "odds": {
+   "1": 0.235,
+   "2": 0.155,
+   "5": 0.086,
+   "10": 0.053
+  },
+  "rating": "good",
+  "confidence": "high"
+ },
+ {
+  "title": "Replying to: how long did it take you to learn Fabric? My timeline",
+  "multiplier": 1.47,
+  "evidence": 1.28,
+  "funnel": 1.15,
+  "sources_median": 15.2,
+  "odds": {
+   "1": 0.288,
+   "2": 0.19,
+   "5": 0.106,
+   "10": 0.065
+  },
+  "rating": "good",
+  "confidence": "medium"
+ },
+ {
+  "title": "Replying to: we paused our Fabric capacity and the bill didn't drop",
+  "multiplier": 0.7,
+  "evidence": 1.17,
+  "funnel": 0.6,
+  "sources_median": 46.7,
+  "odds": {
+   "1": 0.138,
+   "2": 0.091,
+   "5": 0.051,
+   "10": 0.031
+  },
+  "rating": "weak",
+  "confidence": "medium"
+ }
+]
