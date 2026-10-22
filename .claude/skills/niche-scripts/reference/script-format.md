@@ -26,7 +26,12 @@ in a clause.>
 
 Modelled on: [@account, "<their hook>"](<url>) — <views>, <x>× <followers|median>.
 
-**Hook (caption + post title):** <the first line, works with sound off>
+**Seven factors:** sub-niche <…> · angle <tutorial | comparison | myth-bust | do vs don't | tip | transformation | challenge> · format <talking + screen | whiteboard | clone | …> · CTA comment <WORD> → <freebie>
+
+**Hooks (first 3 s), each from a 5× post in the hook bank:**
+- Verbal (heard): "<the first line>" — from <@account, views, ×followers>
+- Written (on screen from frame 1): <2–8 words>
+- Visual (what's seen): <the opening picture>
 
 | # | Say | Picture | Source |
 |---|---|---|---|

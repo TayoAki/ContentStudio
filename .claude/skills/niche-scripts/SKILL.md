@@ -19,7 +19,7 @@ evidence behind it.
 
 The method was worked out on the quiz, fighting-game and Microsoft Fabric niches in this repo
 (`docs/reels/REEL_SPEC.md`, `docs/reels/fabric-scripts.md`); `reference/script-format.md` is the
-output format, `reference/lessons.md` the traps those runs hit.
+output format, `reference/seven-factors.md` the checklist every script fills, `reference/lessons.md` the traps those runs hit.
 
 ## Inputs (ask only for what you can't infer)
 
@@ -54,10 +54,13 @@ Scripts live in `<skill>/scripts/`; run them with `python3 -I`.
 4. **Watch the winners** (optional, recommended when captions are vague): `clips.py --out <work>
    --by shares --top 20`, then Read every `clips/sheet_*.jpg` and fill `clips/tags.tsv`
    (format · hook · mechanic). Look before you claim a format.
-5. **Write the formula** in 5–8 bullets before any script: hook pattern(s) with real examples and
+5. **Hook bank.** From the posts that pass the **5× rule** (views ≥ 5× followers; `report.md` marks them),
+   write down each one's verbal, written and visual hook (`reference/seven-factors.md`).
+   Every script borrows its three hooks from this bank.
+6. **Write the formula** in 5–8 bullets before any script: hook pattern(s) with real examples and
    their numbers, length, structure (claim → 3 reasons → what to do), CTA, what gets saved vs
    shared. This is what the scripts copy; show it to the person.
-6. **Write the scripts** in `reference/script-format.md`'s format:
+7. **Write the scripts** in `reference/script-format.md`'s format, filling all seven factors (`reference/seven-factors.md`):
    - **Each script maps to one proven post**, named with its numbers ("modelled on @x, 82K, 12×
      followers"). Its hook copies that post's hook **shape**, not its words.
    - **Lines:** one idea per line, about 8–14 s of talking per 3 lines, 60–90 s total unless the
@@ -71,7 +74,7 @@ Scripts live in `<skill>/scripts/`; run them with `python3 -I`.
    - **Picture column:** for an Editor V1 edit, each line gets a device and a real source
      (`~/.claude/skills/editor-v1/reference/devices.md`). For a text-only reel, use the
      `scripts/reels/week1.json` shape instead.
-7. **Save**:
+8. **Save**:
    - `docs/reels/<niche-slug>-scripts.md` (the scripts, the formula, the evidence table).
    - The research summary `docs/reels/<niche-slug>-research.md`: outlier tables, with links and
      the pull date.
@@ -80,7 +83,7 @@ Scripts live in `<skill>/scripts/`; run them with `python3 -I`.
      scripts there too: in ContentStudio, `save_format` for the formula (`example_urls` = the
      winning posts) and `save_ideas` for each script (`hook`, `script`, `planned_for`). Use the
      MCP tools, or `POST /api/ingest/formats` and `/api/ingest/ideas` (README "API").
-8. **Report** in chat: the formula in a few bullets, the scripts' titles with the post each copies,
+9. **Report** in chat: the formula in a few bullets, the scripts' titles with the post each copies,
    the claims to check before filming, and the limits: search samples are about 60 posts per
    term, Instagram has no saves or shares, YouTube Shorts are undercounted, and older YouTube dates
    are approximate.

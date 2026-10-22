@@ -53,7 +53,7 @@ Shot lists, on-screen plans and the full "keep exact" notes are in the set's own
 >
 > Fabric is the whole kitchen: getting data in, storing it, cleaning it, and serving it.
 >
-> Everything lands in one lake, OneLake, as open Delta tables.
+> Everything lands in OneLake, one data lake for your whole organization, stored as open Delta tables.
 >
 > Then Power BI reads those tables directly. That's Direct Lake. No import copy, and a refresh only copies metadata.
 >

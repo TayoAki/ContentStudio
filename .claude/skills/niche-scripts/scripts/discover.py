@@ -225,6 +225,17 @@ def main():
     for r in accounts[:25]:
         L.append(f"| {score(r)}x | {r['platform']} | {(r['user'] or '').replace('|', '/')} | {fmt(r['followers'])} | {r['posts_found']} | "
                  f"{fmt(r['best_views'])} | {r['saves_rate'] or ''} | [{r['best_text'][:70].replace('|', '/')}]({r['best_url']}) |")
+    # the 5x rule (views >= 5x the account's followers, or 5x the channel's median on YouTube): the posts hooks are
+    # borrowed from. The verbal hook is the caption's first sentence until the clip is watched (clips.py); fill in
+    # the written and visual hooks from the frames (reference/seven-factors.md).
+    five = [p for p in posts if (p.get('x_channel') or 0) >= 5 or (p['followers'] and p['views'] >= 5 * p['followers'])]
+    L += ['', f'## Hook bank: {len(five)} posts pass the 5x rule', '',
+          '| x | Views | Platform | Account | Verbal hook (caption, first sentence) | Written hook | Visual hook |',
+          '| --- | --- | --- | --- | --- | --- | --- |']
+    for p in sorted(five, key=lambda p: -(p.get('x_channel') or p['views'] / max(p['followers'], 1)))[:60]:
+        x = p.get('x_channel') or round(p['views'] / max(p['followers'], 1), 1)
+        first = re.split(r'(?<=[.!?])\s', (p['text'] or '').strip())[0][:110].replace('|', '/')
+        L.append(f"| {x}x | {fmt(p['views'])} | {p['platform']} | [{(p['user'] or '').replace('|', '/')}]({p['url']}) | {first} |  |  |")
     L += ['', '## Posts per query', ''] + [f'- {q}: {n}' for q, n in sorted(per_q.items(), key=lambda x: -x[1])]
     open(os.path.join(a.out, 'report.md'), 'w').write('\n'.join(L) + '\n')
     print(f'discover: {len(posts)} posts, {len(accounts)} accounts -> {a.out}/report.md')

@@ -36,7 +36,7 @@ Facts come from the Microsoft Fabric Field Guide (`docs/microsoft-fabric-field-g
 | 2 | "It's the wrong question." | you, punch-in on "wrong"; `keyword` shock **WRONG** | — |
 | 3 | "Power BI isn't competing with Fabric. Power BI is *inside* Fabric." | `pop_collage`: Fabric's workload icons landing one per word, Power BI's last and biggest | Microsoft Learn "What is Microsoft Fabric" page (`page_card`) |
 | 4 | "Fabric is the whole kitchen: getting data in, storing it, cleaning it, and serving it." | `seq` on each verb: pipeline, lake, notebook, dashboard | Fabric docs screenshots via `capture.mjs`, re-coloured |
-| 5 | "Everything lands in one lake, OneLake, as open Delta tables." | `cutout_world` with **ONELAKE** behind your head | OneLake overview page |
+| 5 | "Everything lands in OneLake, one data lake for your whole organization, stored as open Delta tables." | `cutout_world` with **ONELAKE** behind your head | OneLake overview page |
 | 6 | "Then Power BI reads those tables directly. That's Direct Lake. No import copy, and a refresh only copies metadata." | `page_card` with the highlighter on "copies only metadata" | Direct Lake overview page |
 | 7 | "So if you already know Power BI, you're not starting over. You're one layer up from where Fabric starts." | you, raw; `captions` big on "one layer" | — |
 | 8 | "Learn the lakehouse, a little SQL, and how data gets into OneLake." | `seq`: lakehouse, SQL, pipeline (three real screens) | Learn pages |
