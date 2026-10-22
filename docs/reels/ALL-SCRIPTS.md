@@ -45,9 +45,9 @@ Shot lists, on-screen plans and the full "keep exact" notes are in the set's own
 
 **Script:**
 
-> Microsoft Fabric versus Power BI is the most searched question in data right now.
+> Microsoft Fabric or Power BI: which one should you learn?
 >
-> And it's the wrong question.
+> It's the wrong question.
 >
 > Power BI isn't competing with Fabric. Power BI is *inside* Fabric.
 >
@@ -55,7 +55,7 @@ Shot lists, on-screen plans and the full "keep exact" notes are in the set's own
 >
 > Everything lands in one lake, OneLake, as open Delta tables.
 >
-> Then Power BI reads those tables directly. That's Direct Lake. No import, no overnight refresh.
+> Then Power BI reads those tables directly. That's Direct Lake. No import copy, and a refresh only copies metadata.
 >
 > So if you already know Power BI, you're not starting over. You're one layer up from where Fabric starts.
 >
@@ -67,7 +67,9 @@ Shot lists, on-screen plans and the full "keep exact" notes are in the set's own
 
 **Facts from:**
 - Microsoft Fabric Field Guide (`docs/microsoft-fabric-field-guide.md`), checked against Microsoft Learn on Oct 20 2026
-- What is Microsoft Fabric, the OneLake overview and the Direct Lake overview on Microsoft Learn
+- [What is Microsoft Fabric](https://learn.microsoft.com/en-us/fabric/fundamentals/microsoft-fabric-overview) (its architecture diagram puts Power BI inside Fabric), [What is OneLake](https://learn.microsoft.com/en-us/fabric/onelake/onelake-overview) and the [Direct Lake overview](https://learn.microsoft.com/en-us/fabric/fundamentals/direct-lake-overview), Microsoft Learn (checked Oct 22 2026)
+
+An example cut was made (TTS voice, no face), modelled on her video's structure: the lifecycle named stage by stage in big yellow caps, yellow uppercase captions.
 
 ---
 

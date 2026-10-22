@@ -26,16 +26,18 @@ Facts come from the Microsoft Fabric Field Guide (`docs/microsoft-fabric-field-g
 
 ## Script 1 — "Fabric vs Power BI" (~65 s)
 
-**Hook (caption + post title):** Fabric vs Power BI is the most searched question in data right now. Here's the answer in 60 seconds.
+**Hook (caption + post title):** Fabric or Power BI: which one should you learn? Here's the answer in 45 seconds.
+
+(Changed Oct 22: "the most searched question in data" had no source, and "no overnight refresh" went further than Microsoft's page, which says a Direct Lake refresh copies only metadata.)
 
 | # | Say | Picture | Source |
 |---|---|---|---|
-| 1 | "Microsoft Fabric versus Power BI is the most searched question in data right now." | `tile_reveal` onto a search box typing "fabric vs power bi", then you, raw | `find_hop` with a rebuilt search bar (no brand marks) |
-| 2 | "And it's the wrong question." | you, punch-in on "wrong"; `keyword` shock **WRONG** | — |
+| 1 | "Microsoft Fabric or Power BI: which one should you learn?" | `tile_reveal` onto a search box typing "fabric vs power bi", then you, raw | `find_hop` with a rebuilt search bar (no brand marks) |
+| 2 | "It's the wrong question." | you, punch-in on "wrong"; `keyword` shock **WRONG** | — |
 | 3 | "Power BI isn't competing with Fabric. Power BI is *inside* Fabric." | `pop_collage`: Fabric's workload icons landing one per word, Power BI's last and biggest | Microsoft Learn "What is Microsoft Fabric" page (`page_card`) |
 | 4 | "Fabric is the whole kitchen: getting data in, storing it, cleaning it, and serving it." | `seq` on each verb: pipeline, lake, notebook, dashboard | Fabric docs screenshots via `capture.mjs`, re-coloured |
 | 5 | "Everything lands in one lake, OneLake, as open Delta tables." | `cutout_world` with **ONELAKE** behind your head | OneLake overview page |
-| 6 | "Then Power BI reads those tables directly. That's Direct Lake. No import, no overnight refresh." | `page_card` with the highlighter on "Direct Lake"; `strobe` on "no overnight refresh" | Direct Lake overview page |
+| 6 | "Then Power BI reads those tables directly. That's Direct Lake. No import copy, and a refresh only copies metadata." | `page_card` with the highlighter on "Direct Lake"; `strobe` on "no overnight refresh" | Direct Lake overview page |
 | 7 | "So if you already know Power BI, you're not starting over. You're one layer up from where Fabric starts." | you, raw; `captions` big on "one layer" | — |
 | 8 | "Learn the lakehouse, a little SQL, and how data gets into OneLake." | `seq`: lakehouse, SQL, pipeline (three real screens) | Learn pages |
 | 9 | "That's the difference between a report builder and the person who owns the data." | you, raw; `keyword` title *owns the data* | — |
