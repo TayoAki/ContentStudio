@@ -94,6 +94,60 @@ Reviewed Oct 22 2026: [Parker Prompts](https://www.youtube.com/@parkerprompts/vi
 - **Hub rule:** no graphic → screen cut; the face is never gone more than about 5 s.
 - **Screens:** they zoom into the line being talked about (`pp_window(..., zoom=…)`).
 
+## What goes on the face vs the screen (the "That's Direct Lake" fix)
+
+In the 16.7× outlier, every talking-head shot under 1.6 s sitting between two screens is a **signpost** that hands over to the next screen:
+
+| Time | Shot | Line |
+| --- | --- | --- |
+| 206 s | 1.2 s | "Here is how it works." |
+| 251 s | 0.8 s | "And here it is." |
+| 316 s | 1.1 s | "Here's how to access it." |
+| 497 s | 1.4 s | "Here's what makes this powerful." |
+| 575 s | 1.4 s | "Now you have two options here." |
+
+The longer face shots inside a demo (2–5 s) are **reactions and opinions**:
+- "the workflow looks perfect";
+- "the quality is honestly shocking".
+
+His chapter pills sit only on face shots that open a new section, 3–9 s long.
+
+**Rule:**
+
+| What's said | Where it goes |
+| --- | --- |
+| Facts, names, numbers, steps | The screen (or a graphic) |
+| Signposts ("here's how…", "here it is") | The face, briefly |
+| Opinions, reactions, the CTA | The face |
+| A name inside an explanation ("That's Direct Lake") | Never cut away from the page: highlight it on the page instead |
+
+**Also:** a screen shot holds at least ~1.5 s; his rare sub-second screens are deliberate UI flashes.
+
+### Our cut against the rule (v5, 47 s)
+
+| Start | Length | Shot | What's said | Role |
+| --- | --- | --- | --- | --- |
+| 0.0 | 2.6 s | Graphic | "Microsoft Fabric or Power BI:" | Hook (cold open) |
+| 2.6 | 1.4 s | Face | "which one should you learn?" | Question / signpost |
+| 4.0 | 1.6 s | Graphic | "It's the wrong question." | Claim as a statement slide |
+| 5.7 | 2.1 s | Face | "Power BI isn't competing with Fabric." | Opinion |
+| 7.7 | 2.3 s | Screen | "Power BI is inside Fabric." | Fact |
+| 10.1 | 1.7 s | Face | "Fabric is the whole kitchen:" | Signpost |
+| 11.7 | 3.7 s | Graphic | "getting data in, storing, cleaning, serving" | Fact (list) |
+| 15.5 | 1.6 s | Face | "Everything lands in OneLake," | Signpost |
+| 17.1 | 2.2 s | Screen | "one data lake for your whole organization," | Fact |
+| 19.3 | 2.4 s | Screen | "stored as open Delta tables." | Fact |
+| 21.8 | 2.6 s | Screen | "Then Power BI reads those tables directly." | Fact |
+| 24.3 | 1.8 s | Screen | "That's Direct Lake. No import copy," | Name: stays on the page (was a 0.8 s face shot) |
+| 26.1 | 2.8 s | Screen | "and a refresh only copies metadata." | Fact |
+| 28.9 | 2.9 s | Face | "So if you already know Power BI, you're not starting over." | Opinion |
+| 31.8 | 2.5 s | Face (tight) | "You're one layer up from where Fabric starts." | Opinion |
+| 34.3 | 4.4 s | Graphic | "Learn the lakehouse, a little SQL, how data gets into OneLake." | Fact (list) |
+| 38.7 | 4.2 s | Face | "That's the difference between a report builder and the person who owns the data." | Opinion |
+| 42.9 | 4.4 s | Face | "Comment FABRIC…" | CTA (he ends every video on camera) |
+
+**Known gap:** the face is away 11.8 s from 17.1 s to 28.9 s, all fact. That's inside his range (median 7.2 s, 75th percentile 13.6 s) but long for a reel. A real take could add a signpost here ("Here's the part Power BI people miss.").
+
 ## How we build it
 
 **Colours:** ours are **blue** (the kit's default theme); `PP_THEME=purple` gives his.
